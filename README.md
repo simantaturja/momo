@@ -66,13 +66,12 @@ and filters faster than you can think.
 ### Homebrew (recommended)
 
 ```sh
-brew tap OWNER/momo
+brew tap simantaturja/momo
 brew install --cask --no-quarantine momo
 ```
 
-> Replace `OWNER` with the GitHub account hosting the tap. `--no-quarantine` skips the
-> Gatekeeper prompt while Momo is distributed unsigned; you can drop it once the app is
-> notarized. Maintainer release steps live in [`RELEASING.md`](RELEASING.md).
+> `--no-quarantine` skips the Gatekeeper prompt while Momo is distributed unsigned; you can
+> drop it once the app is notarized. Maintainer release steps live in [`RELEASING.md`](RELEASING.md).
 
 ### From source
 

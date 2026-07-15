@@ -5,18 +5,14 @@ is currently distributed **unsigned** (ad-hoc signed only), so users see a one-t
 Gatekeeper prompt. Notarization can be added later once a paid Apple Developer account
 and a *Developer ID Application* certificate are available.
 
-Throughout, replace **`OWNER`** with your GitHub username (based on your git email,
-likely `simantaturja` — verify).
+Owner is **`simantaturja`**: app repo `simantaturja/momo`, tap repo `simantaturja/homebrew-momo`.
 
 ## One-time setup
 
-1. **Push this repo to GitHub** (it currently has no remote):
-   ```sh
-   gh repo create OWNER/momo --public --source=. --remote=origin --push
-   ```
+1. **App repo** — done: pushed to `github.com/simantaturja/momo` (master).
 2. **Create the tap repo** — Homebrew taps must be named `homebrew-<name>`:
    ```sh
-   gh repo create OWNER/homebrew-momo --public --clone
+   gh repo create simantaturja/homebrew-momo --public --clone
    mkdir -p homebrew-momo/Casks
    ```
 
@@ -44,7 +40,6 @@ likely `simantaturja` — verify).
 4. **Update the cask** — edit `packaging/homebrew/momo.rb`:
    - set `version`
    - set `sha256` to the value printed in step 2
-   - replace `OWNER`
    Then copy it into the tap and push:
    ```sh
    cp packaging/homebrew/momo.rb ../homebrew-momo/Casks/momo.rb
@@ -54,7 +49,7 @@ likely `simantaturja` — verify).
 
 5. **Verify the whole install path locally:**
    ```sh
-   brew tap OWNER/momo
+   brew tap simantaturja/momo
    brew install --cask --no-quarantine momo
    brew audit --cask --strict momo   # catches cask style/URL/sha problems
    open -a Momo
@@ -63,7 +58,7 @@ likely `simantaturja` — verify).
 ## Users install with
 
 ```sh
-brew tap OWNER/momo
+brew tap simantaturja/momo
 brew install --cask --no-quarantine momo
 ```
 

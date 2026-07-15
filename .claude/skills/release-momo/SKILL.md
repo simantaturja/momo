@@ -7,7 +7,7 @@ description: Use when cutting a new Momo release, publishing the app, or creatin
 
 Repo-specific runbook for shipping Momo via its custom, unsigned Homebrew tap.
 `RELEASING.md` at the repo root is the source of truth — this skill sequences it and flags the
-easy-to-miss steps. Replace `OWNER` with the GitHub account hosting the tap.
+easy-to-miss steps. Repo: `simantaturja/momo`; tap: `simantaturja/homebrew-momo`.
 
 ## Steps
 
@@ -18,8 +18,8 @@ easy-to-miss steps. Replace `OWNER` with the GitHub account hosting the tap.
 2. **Gate:** `swift test` green.
 3. **Package:** `./scripts/package-app.sh` → produces `dist/Momo-<version>.zip` and prints its sha256.
 4. **Publish:** `git tag v<version>` and `gh release create v<version> dist/Momo-<version>.zip`.
-5. **Cask:** in `packaging/homebrew/momo.rb` set `version` + `sha256` (+ `OWNER`), then copy it to
-   the tap repo (`OWNER/homebrew-momo` → `Casks/momo.rb`) and push.
+5. **Cask:** in `packaging/homebrew/momo.rb` set `version` + `sha256`, then copy it to the tap
+   repo (`simantaturja/homebrew-momo` → `Casks/momo.rb`) and push.
 6. **Verify:** `brew audit --cask --strict momo` and a real `brew install --cask --no-quarantine momo`.
 
 ## Gotchas

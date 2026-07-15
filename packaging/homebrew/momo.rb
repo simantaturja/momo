@@ -1,14 +1,14 @@
 # Homebrew Cask for Momo — the maintained copy.
-# On release, this file is synced to the tap repo (OWNER/homebrew-momo) at Casks/momo.rb.
-# Replace OWNER with your GitHub username (e.g. simantaturja) throughout.
+# On release, this file is synced to the tap repo (simantaturja/homebrew-momo) at Casks/momo.rb.
+# Set `sha256` per release to the sha of the exact zip attached to the GitHub release.
 cask "momo" do
   version "0.1.0"
   sha256 "REPLACE_WITH_ZIP_SHA256"
 
-  url "https://github.com/OWNER/momo/releases/download/v#{version}/Momo-#{version}.zip"
+  url "https://github.com/simantaturja/momo/releases/download/v#{version}/Momo-#{version}.zip"
   name "Momo"
   desc "Fast native clipboard-history manager for the menu bar"
-  homepage "https://github.com/OWNER/momo"
+  homepage "https://github.com/simantaturja/momo"
 
   livecheck do
     url :url
