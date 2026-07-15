@@ -1,63 +1,205 @@
-# Momo
+<div align="center">
 
-A fast, native macOS clipboard-history manager that lives in the menu bar. Momo
-keeps a searchable history of what you copy — text, files, and images — and pastes
-any past item back with a keystroke. It is built in plain Swift + AppKit (no Electron,
-no SwiftUI) so the popup opens instantly and typing filters with zero lag.
+# 🥟 Momo
 
-> Momo was formerly named **Pastal**.
+**A blazingly fast clipboard history for macOS that lives in your menu bar.**
+
+Everything you copy — text, files, images — kept, searchable, and one keystroke away.
+Native Swift + AppKit. No Electron. No lag. No telemetry.
+
+![Platform](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
+![Swift](https://img.shields.io/badge/Swift-5.9-orange?logo=swift)
+![UI](https://img.shields.io/badge/UI-AppKit-blue)
+![Tests](https://img.shields.io/badge/tests-30%20passing-brightgreen)
+
+</div>
+
+```
+              press ⌘⇧V, anywhere
+        ┌─────────────────────────────────────────┐
+        │  🔍 git                                   │
+        ├─────────────────────────────────────────┤
+        │  📌 📄  github.com/you/momo               │
+        │     📄  git rebase -i HEAD~3              │
+        │     🖼  Screenshot 2026-07-16.png         │
+        │     📁  Package.swift, README.md          │
+        └─────────────────────────────────────────┘
+           ↑↓ move   ↵ paste   ⌘P pin   ⌘⌫ delete
+```
+
+---
+
+## Why Momo
+
+Clipboard managers have one job and two moments that matter: **the instant the popup
+opens** and **the instant you start typing to find something**. Those are the only two
+times a human actually waits. Momo is built around a single idea — *do zero expensive
+work on those two paths* — and pushes everything else (persistence, pruning, image
+decoding) off to the background.
+
+The result is a utility that feels like it isn't there until you need it, then appears
+and filters faster than you can think.
+
+> Momo is named after the dumpling 🥟 — small, fast, and quietly satisfying. (Yes, the
+> menu-bar icon is a dumpling.) It began life as **Pastal** and was renamed to Momo.
 
 ## Features
 
-- **Instant popup** — a pre-warmed floating panel, built once at launch.
-- **Instant fuzzy search** — filtering runs over an in-memory index, never the disk.
-- **Dedupe** — re-copying the same text, file, or image moves it to the top instead of
-  duplicating it.
-- **Images & files** — thumbnails for images (stored as blobs on disk), file paths for files.
-- **Privacy filter** — items marked concealed/transient by the source app
-  (1Password, etc.) are never stored.
-- **Pin** frequently used items; **delete** single items or **clear** all history.
-- **Auto-paste** — picks an item, restores your previous app, and presses ⌘V for you.
+- ⚡ **Instant popup** — the panel is built once at launch and simply revealed, never
+  rebuilt. Opening is a reveal, not an assembly.
+- 🔎 **Instant fuzzy search** — filtering runs over an in-memory index; a keystroke never
+  touches the disk. Subsequence matching ranks contiguous, early, and pinned matches first.
+- 🧠 **Smart dedupe** — re-copy the same text, file, or image and it moves to the top
+  instead of piling up a duplicate. Images dedupe by their actual bytes.
+- 🖼 **Images & files, handled well** — screenshots are stored as blobs on disk and shown
+  as lazily-decoded, cached thumbnails; files keep their paths and paste as real file URLs.
+- 🔒 **Privacy first** — anything a source app marks *concealed* or *transient*
+  (1Password, other password managers) is never stored. Nothing ever leaves your machine.
+- 📌 **Pin** what you reuse, **delete** (⌘⌫) what you don't, **Clear History** when you want a clean slate.
+- 🪄 **Paste where you were** — pick an item and Momo restores your previous app and presses
+  ⌘V for you.
+- 🪫 **No battery drain** — it watches a single integer a few times a second and only reads
+  the clipboard when that number changes. Idle CPU stays near zero.
 
-## Requirements
+## Install
 
-- macOS 13 or later
-- Xcode / Swift toolchain (Swift 5.9+)
-
-## Build & run
+### Homebrew (recommended)
 
 ```sh
-swift build           # compile
-swift run Momo        # launch the menu-bar app
-swift test            # run the MomoCore test suite
+brew tap OWNER/momo
+brew install --cask --no-quarantine momo
 ```
 
-There is no Dock icon — Momo runs as a menu-bar accessory. Look for its icon in the
-menu bar; the menu offers **Show Momo**, **Launch at Login**, and **Clear History**.
+> Replace `OWNER` with the GitHub account hosting the tap. `--no-quarantine` skips the
+> Gatekeeper prompt while Momo is distributed unsigned; you can drop it once the app is
+> notarized. Maintainer release steps live in [`RELEASING.md`](RELEASING.md).
 
-## Permissions
+### From source
 
-- **Accessibility** — required for automatic paste (Momo synthesizes ⌘V). On first run
-  it prompts; grant Momo under *System Settings ▸ Privacy & Security ▸ Accessibility*.
-  Without it, the item is still placed on the clipboard — you can press ⌘V yourself.
+Requirements: **macOS 13+** and a Swift 5.9+ toolchain (Xcode or the Swift toolchain).
 
-## Shortcut
+```sh
+git clone <this-repo> momo && cd momo
+swift run Momo               # build and launch
+./scripts/package-app.sh     # or build a distributable Momo.app + zip
+```
 
-- **⌘⇧V** — open/close the history panel. (If another app already owns ⌘⇧V, use
-  **Show Momo** from the menu-bar icon.)
-- In the panel: type to search, ↑/↓ to move, ↵ to paste, **⌘P** to pin, **⌘⌫** to delete,
-  **Esc** to dismiss.
+Momo has **no Dock icon** — it runs as a menu-bar accessory. Look for the 🥟 in your menu
+bar. From there: **Show Momo**, **Launch at Login**, and **Clear History…**.
 
-## Data & privacy
+On first launch macOS will ask for **Accessibility** permission — this is what lets Momo
+press ⌘V for you. Grant it under *System Settings ▸ Privacy & Security ▸ Accessibility*.
+(Skip it and Momo still works: your pick lands on the clipboard and you press ⌘V yourself.)
 
-History is stored locally in `~/Library/Application Support/Momo/` (a SQLite database
-plus an `images/` folder). Data never leaves your machine. It is not encrypted at rest;
-at-rest protection relies on your macOS account and FileVault. Non-pinned items are
-capped by count, and images additionally by total size and age.
+## Usage
 
-## Layout
+| Where | Key | Action |
+|-------|-----|--------|
+| Anywhere | **⌘⇧V** | Open / close the history panel |
+| Panel | *type* | Fuzzy-filter the history |
+| Panel | **↑ / ↓** | Move selection |
+| Panel | **↵** | Paste the selected item |
+| Panel | **⌘P** | Pin / unpin the selected item |
+| Panel | **⌘⌫** | Delete the selected item |
+| Panel | **Esc** | Dismiss (returns focus to your previous app) |
 
-- `Sources/MomoCore` — pure, testable core (store, clipboard monitor, index, fuzzy match,
-  privacy filter) behind a `PasteboardReading` protocol.
-- `Sources/Momo` — the AppKit shell (menu bar, panel, hotkey, paste).
-- `Tests/MomoCoreTests` — unit tests for the core.
+> If another app already owns ⌘⇧V, Momo tells you and you can always open it via **Show
+> Momo** in the menu-bar icon.
+
+## How it's fast — the design
+
+Momo's speed isn't micro-optimization; it's structure. The two paths a human waits on are
+kept free of expensive work *by construction*:
+
+- **Pre-warmed panel** — a floating, non-activating `NSPanel` created at startup with
+  `isReleasedWhenClosed = false`. The hotkey just calls `orderFront`/`orderOut`; there's
+  no view allocation or layout on open.
+- **RAM-only search** — `HistoryIndex` holds the recent items as lightweight structs and
+  fuzzy-matches over that array. The database is *structurally unreachable* from the
+  keystroke path, so a slow search is impossible.
+- **`changeCount` polling** — macOS emits no clipboard notification, so a background timer
+  compares `NSPasteboard.changeCount` (one integer) every ~250 ms and only reads contents
+  when it moves. Reading + persisting is rare and off the main thread.
+- **Blob-on-disk images** — image bytes live on disk; the index holds only a path, so image
+  weight never enters the search path, and thumbnails decode lazily (downsampled, cached).
+
+There's a deeper write-up in [`docs/jargon-and-improvements.md`](docs/jargon-and-improvements.md).
+
+## Privacy & data
+
+Everything is **local** and stays local. History lives in
+`~/Library/Application Support/Momo/` — a SQLite database plus an `images/` folder.
+
+- **Secrets are filtered out** at ingest: pasteboards flagged `ConcealedType`,
+  `TransientType`, or `AutoGeneratedType` are never recorded.
+- **Retention caps** keep it bounded — by default the newest **1000** non-pinned items,
+  images capped at **500 MB** total and aged out after **30 days**. Pinned items are exempt.
+  (Overridable via the `maxItems`, `maxImageMB`, `imageMaxAgeDays` `UserDefaults` keys.)
+- **At rest**, the store is not encrypted; protection relies on your macOS account and
+  FileVault. Momo is intentionally unsandboxed (a sandboxed app can't drive a global hotkey
+  or synthesize ⌘V into other apps).
+
+## Momo vs. Maccy
+
+Maccy is a mature, well-built clipboard manager; Momo isn't trying to out-feature it. The
+edge is narrow and deliberate — move every expensive operation off the two paths you wait on.
+
+| You feel… | Momo | Typical menu-based managers |
+|---|---|---|
+| Popup opens instantly | Pre-warmed panel, built once | Rebuild/relayout the UI per open |
+| Typing filters instantly | RAM-only fuzzy index | Filter over a growing store on the main thread |
+| No battery drain | Poll one integer, read on change | Heavier / foreground monitoring |
+| No duplicate clutter | Content-hash dedupe-to-top | Varies |
+| Secrets stay secret | Ingest-time privacy gate | Varies |
+
+## Architecture
+
+Two targets, one clean seam:
+
+```
+Sources/
+  MomoCore/            ← pure, testable logic (no AppKit)
+    Store.swift          GRDB/SQLite persistence, dedupe, pruning, blob GC
+    ClipboardMonitor     changeCount poll → build item → emit
+    HistoryIndex         in-memory list + fuzzy search/ranking
+    FuzzyMatch           subsequence scorer
+    PrivacyFilter        concealed/transient gate
+    PasteboardReading    protocol seam (real vs. fake pasteboard)
+  Momo/                ← thin AppKit shell (side-effects only)
+    AppCoordinator       wires everything together
+    PanelController      the pre-warmed floating panel
+    HistoryView / RowView  the table UI
+    HotkeyManager        Carbon global hotkey
+    Paster               writes pasteboard + synthesizes ⌘V
+Tests/MomoCoreTests/   ← unit tests for the core
+```
+
+All the logic worth testing sits in `MomoCore` behind the `PasteboardReading` protocol, so
+the clipboard can be faked in tests. The `Momo` layer is deliberately kept as thin,
+untestable-by-design adapters (menu bar, panel, hotkey, keystroke synthesis).
+
+## Development
+
+```sh
+swift build            # compile everything
+swift run Momo         # launch the app
+swift test             # run the MomoCore suite (30 tests)
+```
+
+Core behavior is developed test-first — dedupe, pruning (count / byte-cap / age-out),
+blob reclamation, and orphan GC all have tests that assert real behavior against a real
+in-memory store.
+
+## Roadmap
+
+- [ ] Preferences UI for the retention caps (currently `defaults` keys only)
+- [ ] Throttle background pruning off the per-copy path
+- [ ] CI (`swift test` on push) + a formatter
+- [ ] Rich-text capture (the `.richText` kind is reserved but not yet produced)
+- [ ] A `LICENSE` (currently unlicensed — all rights reserved)
+
+---
+
+<div align="center">
+Made with AppKit and a preference for things that just open. 🥟
+</div>
