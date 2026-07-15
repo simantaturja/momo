@@ -36,7 +36,15 @@ final class AppCoordinator {
                 self.index.prepend(item)
                 self.historyView.reload()
             }
+            self.pollQueue.async { self.runPrune() }
         }
+    }
+
+    func runPrune() {
+        try? store.prune(maxItems: Settings.maxItems,
+                         maxImageBytes: Settings.maxImageBytes,
+                         imageMaxAge: Settings.imageMaxAge,
+                         now: Date())
     }
 
     func paste(_ item: ClipboardItem) {
