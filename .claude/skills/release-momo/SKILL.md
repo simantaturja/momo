@@ -20,12 +20,16 @@ easy-to-miss steps. Repo: `simantaturja/momo`; tap: `simantaturja/homebrew-momo`
 4. **Publish:** `git tag v<version>` and `gh release create v<version> dist/Momo-<version>.zip`.
 5. **Cask:** in `packaging/homebrew/momo.rb` set `version` + `sha256`, then copy it to the tap
    repo (`simantaturja/homebrew-momo` → `Casks/momo.rb`) and push.
-6. **Verify:** `brew audit --cask --strict momo` and a real `brew install --cask --no-quarantine momo`.
+6. **Verify:** `brew trust simantaturja/momo`, `brew audit --cask --strict momo`, then a real
+   `brew install --cask momo` and `xattr -r -d com.apple.quarantine /Applications/Momo.app`.
 
 ## Gotchas
 
 - The version must match in Info.plist, `MomoCore.swift`, and `SmokeTests` — the test enforces it.
 - The cask `sha256` must be the sha of the exact zip attached to the release; regenerate per
   release (the package script prints it).
-- Unsigned build → users need `--no-quarantine`. Drop it only after notarization (see the
-  bottom of `RELEASING.md`; needs a paid Apple Developer account + Developer ID cert).
+- Homebrew 6.x removed `--no-quarantine` (no replacement) and requires `brew trust` for
+  third-party taps. So users must `brew trust simantaturja/momo`, and clear the quarantine on
+  the unsigned app with `xattr -r -d com.apple.quarantine /Applications/Momo.app` (or
+  right-click → Open). Both go away once notarized (see the bottom of `RELEASING.md`; needs a
+  paid Apple Developer account + Developer ID cert).

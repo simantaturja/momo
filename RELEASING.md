@@ -49,21 +49,25 @@ Owner is **`simantaturja`**: app repo `simantaturja/momo`, tap repo `simantaturj
 
 5. **Verify the whole install path locally:**
    ```sh
-   brew tap simantaturja/momo
-   brew install --cask --no-quarantine momo
+   brew untap simantaturja/momo 2>/dev/null; brew tap simantaturja/momo
+   brew trust simantaturja/momo
    brew audit --cask --strict momo   # catches cask style/URL/sha problems
-   open -a Momo
+   brew install --cask momo
+   xattr -r -d com.apple.quarantine /Applications/Momo.app && open -a Momo
    ```
 
 ## Users install with
 
 ```sh
 brew tap simantaturja/momo
-brew install --cask --no-quarantine momo
+brew trust simantaturja/momo          # Homebrew 6.0+ requires trusting third-party taps
+brew install --cask momo
+xattr -r -d com.apple.quarantine /Applications/Momo.app   # unsigned: clear Gatekeeper once
 ```
 
-(`--no-quarantine` skips the Gatekeeper prompt for the unsigned build. Drop it once the
-app is notarized.)
+Notes: `--no-quarantine` was removed in Homebrew 6.x with no replacement, so the unsigned app
+is quarantined on install — clear it with the `xattr` line above, or right-click Momo.app →
+Open the first time. Third-party taps are no longer trusted by default (`brew trust`).
 
 ## Later: notarization (smooth, no Gatekeeper prompt)
 
@@ -80,4 +84,4 @@ xcrun stapler staple dist/Momo.app
 # re-zip after stapling
 ```
 
-Once notarized, drop `--no-quarantine` from the install instructions.
+Once notarized, drop the `xattr` quarantine-clearing step from the install instructions.

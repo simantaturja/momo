@@ -67,11 +67,14 @@ and filters faster than you can think.
 
 ```sh
 brew tap simantaturja/momo
-brew install --cask --no-quarantine momo
+brew trust simantaturja/momo          # third-party taps need trust (Homebrew 6.0+)
+brew install --cask momo
+xattr -r -d com.apple.quarantine /Applications/Momo.app   # unsigned: clear Gatekeeper once
 ```
 
-> `--no-quarantine` skips the Gatekeeper prompt while Momo is distributed unsigned; you can
-> drop it once the app is notarized. Maintainer release steps live in [`RELEASING.md`](RELEASING.md).
+> Momo isn't notarized yet, so macOS quarantines it — the `xattr` line clears that once (or
+> right-click Momo.app in Finder → Open the first time). Once the app is notarized, that step
+> goes away. Maintainer release steps live in [`RELEASING.md`](RELEASING.md).
 
 ### From source
 

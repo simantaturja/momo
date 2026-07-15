@@ -15,18 +15,17 @@ cask "momo" do
     strategy :github_latest
   end
 
-  depends_on macos: ">= :ventura"
+  depends_on macos: :ventura
 
   app "Momo.app"
 
-  zap trash: [
-    "~/Library/Application Support/Momo",
-  ]
+  zap trash: "~/Library/Application Support/Momo"
 
   caveats <<~EOS
-    Momo is not notarized yet, so Gatekeeper may block the first launch. Either:
-      brew install --cask --no-quarantine momo
-    or right-click Momo.app in /Applications and choose Open once.
+    Momo is not notarized yet, so macOS quarantines it on install. To run it, either clear
+    the quarantine once:
+      xattr -r -d com.apple.quarantine /Applications/Momo.app
+    or right-click Momo.app in Finder and choose Open the first time.
 
     Momo needs Accessibility permission to paste automatically:
       System Settings > Privacy & Security > Accessibility > enable Momo.
