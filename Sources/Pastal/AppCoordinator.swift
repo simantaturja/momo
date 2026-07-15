@@ -7,6 +7,7 @@ final class AppCoordinator {
     let monitor: ClipboardMonitor
     private var pollTimer: DispatchSourceTimer?
     private let pollQueue = DispatchQueue(label: "pastal.poll", qos: .utility)
+    lazy var panel = PanelController(contentView: NSView())
 
     init() throws {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

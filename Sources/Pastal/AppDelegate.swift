@@ -10,7 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         coordinator = try! AppCoordinator()
         coordinator.startPolling()
 
-        hotkey = HotkeyManager { NSLog("Pastal hotkey fired") }
+        hotkey = HotkeyManager { [weak self] in self?.coordinator.panel.toggle() }
         hotkey.register()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
