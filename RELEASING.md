@@ -22,8 +22,10 @@ likely `simantaturja` — verify).
 
 ## Each release
 
-1. **Bump the version** in `Sources/Momo/Info.plist` (`CFBundleShortVersionString`,
-   and `CFBundleVersion`) and in `Sources/MomoCore/MomoCore.swift`. Keep them in sync.
+1. **Bump the version** in all three places, kept in sync:
+   - `Sources/Momo/Info.plist` — `CFBundleShortVersionString` (and `CFBundleVersion`)
+   - `Sources/MomoCore/MomoCore.swift` — `version`
+   - `Tests/MomoCoreTests/SmokeTests.swift` — asserts `MomoCore.version`; update it or `swift test` fails.
 
 2. **Build the distributable app + zip:**
    ```sh
