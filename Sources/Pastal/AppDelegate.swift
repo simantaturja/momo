@@ -4,10 +4,14 @@ import PastalCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     var coordinator: AppCoordinator!
+    private var hotkey: HotkeyManager!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         coordinator = try! AppCoordinator()
         coordinator.startPolling()
+
+        hotkey = HotkeyManager { NSLog("Pastal hotkey fired") }
+        hotkey.register()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "📋"
