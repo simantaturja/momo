@@ -5,15 +5,23 @@ final class AppCoordinator {
     let store: Store
     let index = HistoryIndex()
     let monitor: ClipboardMonitor
+    let imagesDir: String
     private var pollTimer: DispatchSourceTimer?
     private let pollQueue = DispatchQueue(label: "pastal.poll", qos: .utility)
-    lazy var panel = PanelController(contentView: NSView())
+
+    lazy var historyView = HistoryView(
+        index: index,
+        imagesDir: imagesDir,
+        onChoose: { [weak self] item in self?.paste(item) },   // paste() added in Task 11
+        onPinToggle: { [weak self] item in try? self?.store.setPinned(id: item.id, pinned: !item.pinned) }
+    )
+    lazy var panel = PanelController(contentView: historyView)
 
     init() throws {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Pastal")
         let dbPath = appSupport.appendingPathComponent("history.sqlite").path
-        let imagesDir = appSupport.appendingPathComponent("images").path
+        imagesDir = appSupport.appendingPathComponent("images").path
         store = try Store(path: dbPath, imagesDirectory: imagesDir)
         let reader = NSPasteboardReader()
         monitor = ClipboardMonitor(pasteboard: reader, writeImageBlob: { [store] data in
@@ -24,8 +32,16 @@ final class AppCoordinator {
         monitor.onNewItem = { [weak self] item in
             guard let self else { return }
             try? self.store.upsert(item)
-            DispatchQueue.main.async { self.index.prepend(item) }
+            DispatchQueue.main.async {
+                self.index.prepend(item)
+                self.historyView.reload()
+            }
         }
+    }
+
+    // Placeholder until Task 11 implements the real paste-and-restore flow.
+    func paste(_ item: ClipboardItem) {
+        panel.hide()
     }
 
     func startPolling() {

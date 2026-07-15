@@ -29,6 +29,7 @@ final class PanelController {
         let ms = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
         NSLog("Pastal open render: \(ms) ms")
         NSApp.activate(ignoringOtherApps: true)
+        (panel.contentView as? HistoryView)?.focusSearch()
     }
 
     func hide() {

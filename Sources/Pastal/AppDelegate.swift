@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         coordinator = try! AppCoordinator()
         coordinator.startPolling()
+        _ = coordinator.panel  // eager pre-warm: build panel/HistoryView at launch, not on first hotkey press
 
         hotkey = HotkeyManager { [weak self] in self?.coordinator.panel.toggle() }
         hotkey.register()
