@@ -3,7 +3,7 @@
 # Set `sha256` per release to the sha of the exact zip attached to the GitHub release.
 cask "momo" do
   version "0.1.0"
-  sha256 "REPLACE_WITH_ZIP_SHA256"
+  sha256 "88831acb24dc1db95ff607037d988c8ce9a43be1177da292dfcd58c9acffb010"
 
   url "https://github.com/simantaturja/momo/releases/download/v#{version}/Momo-#{version}.zip"
   name "Momo"
