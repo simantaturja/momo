@@ -6,6 +6,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     private let imagesDir: String
     private let onChoose: (ClipboardItem) -> Void
     private let onPinToggle: (ClipboardItem) -> Void
+    private let onCancel: () -> Void
 
     private let searchField = NSSearchField()
     private let tableView = NSTableView()
@@ -13,9 +14,11 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
 
     init(index: HistoryIndex, imagesDir: String,
          onChoose: @escaping (ClipboardItem) -> Void,
-         onPinToggle: @escaping (ClipboardItem) -> Void) {
+         onPinToggle: @escaping (ClipboardItem) -> Void,
+         onCancel: @escaping () -> Void) {
         self.index = index; self.imagesDir = imagesDir
         self.onChoose = onChoose; self.onPinToggle = onPinToggle
+        self.onCancel = onCancel
         super.init(frame: .zero)
         buildUI()
         reload()
@@ -84,6 +87,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         case #selector(NSResponder.insertNewline(_:)): chooseSelected(); return true
         case #selector(NSResponder.moveDown(_:)): moveSelection(+1); return true
         case #selector(NSResponder.moveUp(_:)): moveSelection(-1); return true
+        case #selector(NSResponder.cancelOperation(_:)): onCancel(); return true
         default: return false
         }
     }

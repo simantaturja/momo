@@ -19,7 +19,8 @@ final class AppCoordinator {
                 try? self.store.setPinned(id: item.id, pinned: !item.pinned)
                 self.reloadIndexFromStore()
             }
-        }
+        },
+        onCancel: { [weak self] in self?.dismiss() }
     )
     lazy var panel = PanelController(contentView: historyView)
 
@@ -60,6 +61,11 @@ final class AppCoordinator {
             self.index.replaceAll(items)
             self.historyView.reload()
         }
+    }
+
+    func dismiss() {
+        panel.hide()
+        panel.restorePreviousApp()
     }
 
     func paste(_ item: ClipboardItem) {
