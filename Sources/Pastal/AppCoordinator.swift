@@ -39,9 +39,14 @@ final class AppCoordinator {
         }
     }
 
-    // Placeholder until Task 11 implements the real paste-and-restore flow.
     func paste(_ item: ClipboardItem) {
+        Paster.writeToPasteboard(item, imagesDir: imagesDir)
         panel.hide()
+        panel.restorePreviousApp()
+        // Give focus a beat to return, then synth Cmd+V.
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(80)) {
+            Paster.synthesizePaste()
+        }
     }
 
     func startPolling() {
