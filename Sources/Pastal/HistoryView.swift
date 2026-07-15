@@ -55,6 +55,17 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
 
     func focusSearch() { window?.makeFirstResponder(searchField) }
 
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers == "p" {
+            let row = tableView.selectedRow
+            if row >= 0, row < results.count {
+                onPinToggle(results[row])
+                return true
+            }
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
     func reload() {
         let start = DispatchTime.now()
         results = index.search(searchField.stringValue)

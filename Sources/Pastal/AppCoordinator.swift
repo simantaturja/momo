@@ -13,7 +13,13 @@ final class AppCoordinator {
         index: index,
         imagesDir: imagesDir,
         onChoose: { [weak self] item in self?.paste(item) },   // paste() added in Task 11
-        onPinToggle: { [weak self] item in try? self?.store.setPinned(id: item.id, pinned: !item.pinned) }
+        onPinToggle: { [weak self] item in
+            guard let self else { return }
+            self.pollQueue.async {
+                try? self.store.setPinned(id: item.id, pinned: !item.pinned)
+                self.reloadIndexFromStore()
+            }
+        }
     )
     lazy var panel = PanelController(contentView: historyView)
 
@@ -45,6 +51,15 @@ final class AppCoordinator {
                          maxImageBytes: Settings.maxImageBytes,
                          imageMaxAge: Settings.imageMaxAge,
                          now: Date())
+        reloadIndexFromStore()
+    }
+
+    private func reloadIndexFromStore() {
+        let items = (try? store.recent(limit: 1000)) ?? []
+        DispatchQueue.main.async {
+            self.index.replaceAll(items)
+            self.historyView.reload()
+        }
     }
 
     func paste(_ item: ClipboardItem) {

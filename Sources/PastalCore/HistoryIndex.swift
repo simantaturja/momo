@@ -10,6 +10,12 @@ public final class HistoryIndex {
     }
 
     public func prepend(_ item: ClipboardItem) {
+        var item = item
+        if let existing = items.first(where: { $0.contentHash == item.contentHash }) {
+            item = ClipboardItem(id: existing.id, kind: item.kind, preview: item.preview,
+                                  text: item.text, imagePath: item.imagePath, filePaths: item.filePaths,
+                                  createdAt: item.createdAt, pinned: item.pinned, contentHash: item.contentHash)
+        }
         items.removeAll { $0.contentHash == item.contentHash }
         items.insert(item, at: 0)
     }

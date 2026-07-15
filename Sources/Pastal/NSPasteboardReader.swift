@@ -7,7 +7,9 @@ final class NSPasteboardReader: PasteboardReading {
     var types: Set<String> { Set((pb.types ?? []).map(\.rawValue)) }
     func string() -> String? { pb.string(forType: .string) }
     func imageData() -> Data? {
-        pb.data(forType: .tiff) ?? pb.data(forType: .png)
+        guard let data = pb.data(forType: .tiff) ?? pb.data(forType: .png),
+              let rep = NSBitmapImageRep(data: data) else { return nil }
+        return rep.representation(using: .png, properties: [:])
     }
     func fileURLs() -> [String] {
         (pb.readObjects(forClasses: [NSURL.self]) as? [URL])?

@@ -39,4 +39,17 @@ final class HistoryIndexTests: XCTestCase {
         XCTAssertEqual(idx.search("").map(\.preview), ["a", "b"])
         XCTAssertEqual(idx.search("").count, 2)
     }
+
+    func testPrependReusesExistingIdOnDuplicate() {
+        let idx = HistoryIndex()
+        let existing = item("a", at: 1)
+        idx.replaceAll([existing, item("b", at: 2)])
+        let incoming = ClipboardItem(id: UUID(), kind: .text, preview: "a", text: "a",
+                                      imagePath: nil, filePaths: [], createdAt: Date(timeIntervalSince1970: 3),
+                                      pinned: false, contentHash: existing.contentHash)
+        XCTAssertNotEqual(incoming.id, existing.id)
+        idx.prepend(incoming)
+        let front = idx.search("").first!
+        XCTAssertEqual(front.id, existing.id)
+    }
 }
