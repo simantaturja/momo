@@ -7,7 +7,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkey: HotkeyManager!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        coordinator = try! AppCoordinator()
+        guard let coordinator = makeCoordinator() else { NSApp.terminate(nil); return }
+        self.coordinator = coordinator
         coordinator.startPolling()
         _ = coordinator.panel  // eager pre-warm: build panel/HistoryView at launch, not on first hotkey press
 
@@ -25,11 +26,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let login = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
         login.state = Settings.launchAtLogin ? .on : .off
         menu.addItem(login)
+        menu.addItem(NSMenuItem(title: "Clear History…", action: #selector(clearHistory), keyEquivalent: ""))
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Momo", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
     }
 
+    /// Opens the store, recovering from a corrupt/unreadable database by quarantining it
+    /// and retrying once, rather than crash-looping on every launch.
+    private func makeCoordinator() -> AppCoordinator? {
+        do {
+            return try AppCoordinator()
+        } catch {
+            NSLog("Momo: store init failed (\(error)); quarantining and retrying")
+            AppCoordinator.quarantineDatabase()
+            do {
+                return try AppCoordinator()
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "Momo couldn't open its clipboard history"
+                alert.informativeText = "The history database appears to be damaged and couldn't be recovered.\n\n\(error.localizedDescription)"
+                alert.alertStyle = .critical
+                alert.addButton(withTitle: "Quit")
+                alert.runModal()
+                return nil
+            }
+        }
+    }
+
     @objc private func showPanel() { coordinator.panel.show() }
+
+    @objc private func clearHistory() {
+        let alert = NSAlert()
+        alert.messageText = "Clear all clipboard history?"
+        alert.informativeText = "This permanently deletes every saved item and image, including pinned items."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Clear")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn { coordinator.clearHistory() }
+    }
 
     private func warnHotkeyRegistrationFailed() {
         let alert = NSAlert()

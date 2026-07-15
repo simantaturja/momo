@@ -95,8 +95,13 @@ public final class Store {
         }
     }
 
-    public func prune(maxItems: Int, maxImageBytes: Int64, imageMaxAge: TimeInterval, now: Date) throws {
+    /// Enforces retention caps. Returns the number of rows deleted so the caller
+    /// can skip a UI refresh when nothing changed.
+    @discardableResult
+    public func prune(maxItems: Int, maxImageBytes: Int64, imageMaxAge: TimeInterval, now: Date) throws -> Int {
         try dbQueue.write { db in
+            var deleted = 0
+
             // 1. Age out old images (non-pinned only).
             let cutoff = now.timeIntervalSince1970 - imageMaxAge
             let agedRows = try Row.fetchAll(db, sql: """
@@ -104,38 +109,73 @@ public final class Store {
                 WHERE kind = 'image' AND pinned = 0 AND createdAt < ?
                 """, arguments: [cutoff])
             for row in agedRows { removeBlob(row["imagePath"]) }
-            try db.execute(sql: "DELETE FROM items WHERE kind = 'image' AND pinned = 0 AND createdAt < ?", arguments: [cutoff])
+            deleted += try Store.deleteRows(db, ids: agedRows.map { $0["id"] as String })
 
             // 2. Enforce image byte cap (oldest non-pinned images first).
             var total = try Int64.fetchOne(db, sql: "SELECT COALESCE(SUM(imageBytes),0) FROM items") ?? 0
             if total > maxImageBytes {
                 let imgs = try Row.fetchAll(db, sql: """
                     SELECT id, imagePath, imageBytes FROM items
-                    WHERE kind = 'image' AND pinned = 0 ORDER BY createdAt ASC
+                    WHERE kind = 'image' AND pinned = 0 ORDER BY createdAt ASC, id ASC
                     """)
+                var overflow: [String] = []
                 for row in imgs where total > maxImageBytes {
                     removeBlob(row["imagePath"])
-                    try db.execute(sql: "DELETE FROM items WHERE id = ?", arguments: [row["id"] as String])
+                    overflow.append(row["id"])
                     total -= (row["imageBytes"] as Int64? ?? 0)
                 }
+                deleted += try Store.deleteRows(db, ids: overflow)
             }
 
             // 3. Enforce item count cap on non-pinned rows (oldest first).
             let nonPinnedCount = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM items WHERE pinned = 0") ?? 0
             if nonPinnedCount > maxItems {
-                let toDelete = nonPinnedCount - maxItems
+                // Delete exactly the rows whose blobs we remove — a deterministic tiebreaker
+                // keeps blob-removal and row-deletion targeting the same rows under ties.
                 let rows = try Row.fetchAll(db, sql: """
                     SELECT id, imagePath FROM items WHERE pinned = 0
-                    ORDER BY createdAt ASC LIMIT ?
-                    """, arguments: [toDelete])
+                    ORDER BY createdAt ASC, id ASC LIMIT ?
+                    """, arguments: [nonPinnedCount - maxItems])
                 for row in rows { removeBlob(row["imagePath"]) }
-                try db.execute(sql: """
-                    DELETE FROM items WHERE id IN (
-                        SELECT id FROM items WHERE pinned = 0 ORDER BY createdAt ASC LIMIT ?
-                    )
-                    """, arguments: [toDelete])
+                deleted += try Store.deleteRows(db, ids: rows.map { $0["id"] as String })
             }
+
+            return deleted
         }
+    }
+
+    /// Deletes every row and its image blob. Includes pinned items.
+    public func deleteAll() throws {
+        try dbQueue.write { db in
+            let rows = try Row.fetchAll(db, sql: "SELECT imagePath FROM items")
+            for row in rows { removeBlob(row["imagePath"]) }
+            try db.execute(sql: "DELETE FROM items")
+        }
+    }
+
+    /// Deletes image blob files on disk that no row references (e.g. left behind
+    /// by a crash between writing a blob and committing its row). Returns the count removed.
+    @discardableResult
+    public func reapOrphanBlobs() throws -> Int {
+        let referenced: Set<String> = try dbQueue.read { db in
+            Set(try String.fetchAll(db, sql: "SELECT imagePath FROM items WHERE imagePath IS NOT NULL"))
+        }
+        let fm = FileManager.default
+        let files = (try? fm.contentsOfDirectory(atPath: imagesDirectory)) ?? []
+        var removed = 0
+        for name in files where !referenced.contains(name) {
+            try? fm.removeItem(atPath: (imagesDirectory as NSString).appendingPathComponent(name))
+            removed += 1
+        }
+        return removed
+    }
+
+    private static func deleteRows(_ db: Database, ids: [String]) throws -> Int {
+        guard !ids.isEmpty else { return 0 }
+        let placeholders = Array(repeating: "?", count: ids.count).joined(separator: ",")
+        try db.execute(sql: "DELETE FROM items WHERE id IN (\(placeholders))",
+                       arguments: StatementArguments(ids))
+        return ids.count
     }
 
     private func removeBlob(_ rel: String?) {

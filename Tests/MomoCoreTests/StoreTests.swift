@@ -105,6 +105,68 @@ final class StoreTests: XCTestCase {
         XCTAssertTrue(exists(dir, paths[2]))
     }
 
+    func testPruneReturnsDeletedCount() throws {
+        let store = try makeStore()
+        for i in 1...3 { try store.upsert(textItem("n\(i)", at: TimeInterval(i))) }
+        // Nothing exceeds caps -> zero deleted (lets the caller skip a needless reload).
+        XCTAssertEqual(try store.prune(maxItems: 100, maxImageBytes: .max, imageMaxAge: .infinity,
+                                       now: Date(timeIntervalSince1970: 100)), 0)
+        // Cap to 1 -> two non-pinned rows removed.
+        XCTAssertEqual(try store.prune(maxItems: 1, maxImageBytes: .max, imageMaxAge: .infinity,
+                                       now: Date(timeIntervalSince1970: 100)), 2)
+        XCTAssertEqual(try store.recent(limit: 10).count, 1)
+    }
+
+    func testPruneCountCapKeepsBlobsAndRowsConsistentUnderTiedTimestamps() throws {
+        let (store, dir) = try makeStoreWithDir()
+        var paths: [String] = []
+        for i in 1...3 {   // three non-pinned images sharing one createdAt -> ambiguous order
+            let p = try store.writeImageBlob(Data(count: 10))
+            paths.append(p)
+            try store.upsert(imageItem(path: p, hash: "h\(i)", at: 5, preview: "img\(i)"))
+        }
+        XCTAssertEqual(try store.prune(maxItems: 1, maxImageBytes: .max, imageMaxAge: .infinity,
+                                       now: Date(timeIntervalSince1970: 100)), 2)
+        let survivors = try store.recent(limit: 10)
+        XCTAssertEqual(survivors.count, 1)
+        let survivorPath = survivors[0].imagePath!
+        XCTAssertTrue(exists(dir, survivorPath), "surviving row's blob must remain")
+        for p in paths where p != survivorPath {
+            XCTAssertFalse(exists(dir, p), "every deleted row's blob must be removed — no dangling reference")
+        }
+    }
+
+    func testDeleteRemovesRowAndBlob() throws {
+        let (store, dir) = try makeStoreWithDir()
+        let p = try store.writeImageBlob(Data(count: 8))
+        let item = imageItem(path: p, hash: "d", at: 1)
+        try store.upsert(item)
+        try store.delete(id: item.id)
+        XCTAssertEqual(try store.recent(limit: 10).count, 0)
+        XCTAssertFalse(exists(dir, p), "blob removed on delete")
+    }
+
+    func testDeleteAllClearsRowsAndBlobs() throws {
+        let (store, dir) = try makeStoreWithDir()
+        let p = try store.writeImageBlob(Data(count: 8))
+        try store.upsert(imageItem(path: p, hash: "x", at: 1))
+        try store.upsert(textItem("hi", at: 2, pinned: true))   // pins included
+        try store.deleteAll()
+        XCTAssertEqual(try store.recent(limit: 10).count, 0)
+        XCTAssertFalse(exists(dir, p))
+    }
+
+    func testReapOrphanBlobsRemovesUnreferencedFilesOnly() throws {
+        let (store, dir) = try makeStoreWithDir()
+        let referenced = try store.writeImageBlob(Data(count: 8))
+        try store.upsert(imageItem(path: referenced, hash: "r", at: 1))
+        let orphan = try store.writeImageBlob(Data(count: 8))   // written, never rowed
+        XCTAssertTrue(exists(dir, orphan))
+        XCTAssertEqual(try store.reapOrphanBlobs(), 1)
+        XCTAssertFalse(exists(dir, orphan), "unreferenced blob reaped")
+        XCTAssertTrue(exists(dir, referenced), "referenced blob kept")
+    }
+
     func testPruneAgesOutOldUnpinnedImagesOnly() throws {
         let (store, dir) = try makeStoreWithDir()
         let bytes = Data(count: 10)

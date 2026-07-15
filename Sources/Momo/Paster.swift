@@ -15,21 +15,25 @@ enum Paster {
         _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
 
-    static func writeToPasteboard(_ item: ClipboardItem, imagesDir: String) {
+    /// Writes the item to the general pasteboard. Returns whether any content was
+    /// actually written, so the caller can skip synthesizing a paste of nothing.
+    @discardableResult
+    static func writeToPasteboard(_ item: ClipboardItem, imagesDir: String) -> Bool {
         let pb = NSPasteboard.general
         pb.clearContents()
         switch item.kind {
         case .text, .richText:
-            if let t = item.text { pb.setString(t, forType: .string) }
+            guard let t = item.text else { return false }
+            return pb.setString(t, forType: .string)
         case .image:
-            if let rel = item.imagePath,
-               let img = NSImage(contentsOfFile: (imagesDir as NSString).appendingPathComponent(rel)),
-               let tiff = img.tiffRepresentation {
-                pb.setData(tiff, forType: .tiff)
-            }
+            guard let rel = item.imagePath,
+                  let img = NSImage(contentsOfFile: (imagesDir as NSString).appendingPathComponent(rel)),
+                  let tiff = img.tiffRepresentation else { return false }
+            return pb.setData(tiff, forType: .tiff)
         case .file:
             let urls = item.filePaths.map { URL(fileURLWithPath: $0) as NSURL }
-            pb.writeObjects(urls)
+            guard !urls.isEmpty else { return false }
+            return pb.writeObjects(urls)
         }
     }
 

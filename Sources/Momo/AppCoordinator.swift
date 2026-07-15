@@ -8,15 +8,41 @@ final class AppCoordinator {
     let imagesDir: String
     private var pollTimer: DispatchSourceTimer?
     private let pollQueue = DispatchQueue(label: "momo.poll", qos: .utility)
+    private var didWarnNoAccessibility = false
+
+    // MARK: Store location
+
+    static func appSupportDir() -> URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Momo")
+    }
+    static var dbPath: String { appSupportDir().appendingPathComponent("history.sqlite").path }
+    static var imagesDirPath: String { appSupportDir().appendingPathComponent("images").path }
+
+    /// Moves a damaged database aside so a fresh one can be created on the next attempt.
+    static func quarantineDatabase() {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: dbPath) else { return }
+        let aside = dbPath + ".corrupt-\(Int(Date().timeIntervalSince1970))"
+        try? fm.moveItem(atPath: dbPath, toPath: aside)
+        NSLog("Momo: quarantined unreadable database to \(aside)")
+    }
 
     lazy var historyView = HistoryView(
         index: index,
         imagesDir: imagesDir,
-        onChoose: { [weak self] item in self?.paste(item) },   // paste() added in Task 11
+        onChoose: { [weak self] item in self?.paste(item) },
         onPinToggle: { [weak self] item in
             guard let self else { return }
             self.pollQueue.async {
                 try? self.store.setPinned(id: item.id, pinned: !item.pinned)
+                self.reloadIndexFromStore()
+            }
+        },
+        onDelete: { [weak self] item in
+            guard let self else { return }
+            self.pollQueue.async {
+                try? self.store.delete(id: item.id)
                 self.reloadIndexFromStore()
             }
         },
@@ -25,41 +51,54 @@ final class AppCoordinator {
     lazy var panel = PanelController(contentView: historyView)
 
     init() throws {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Momo")
-        let dbPath = appSupport.appendingPathComponent("history.sqlite").path
-        imagesDir = appSupport.appendingPathComponent("images").path
-        store = try Store(path: dbPath, imagesDirectory: imagesDir)
+        imagesDir = Self.imagesDirPath
+        store = try Store(path: Self.dbPath, imagesDirectory: imagesDir)
         let reader = NSPasteboardReader()
         monitor = ClipboardMonitor(pasteboard: reader, writeImageBlob: { [store] data in
             try store.writeImageBlob(data)
         })
 
-        index.replaceAll((try? store.recent(limit: 1000)) ?? [])
+        index.replaceAll((try? store.recent(limit: Settings.maxItems)) ?? [])
         monitor.onNewItem = { [weak self] item in
             guard let self else { return }
-            try? self.store.upsert(item)
+            do {
+                try self.store.upsert(item)
+            } catch {
+                NSLog("Momo: failed to persist clipboard item: \(error)")
+                return   // don't show an item we didn't save
+            }
             DispatchQueue.main.async {
                 self.index.prepend(item)
-                self.historyView.reload()
+                self.historyView.reload(preserveSelection: true)
             }
             self.pollQueue.async { self.runPrune() }
         }
+
+        // Reclaim any blobs left behind by a prior crash between blob-write and row-commit.
+        let store = self.store
+        pollQueue.async { _ = try? store.reapOrphanBlobs() }
     }
 
     func runPrune() {
-        try? store.prune(maxItems: Settings.maxItems,
-                         maxImageBytes: Settings.maxImageBytes,
-                         imageMaxAge: Settings.imageMaxAge,
-                         now: Date())
-        reloadIndexFromStore()
+        let deleted = (try? store.prune(maxItems: Settings.maxItems,
+                                        maxImageBytes: Settings.maxImageBytes,
+                                        imageMaxAge: Settings.imageMaxAge,
+                                        now: Date())) ?? 0
+        if deleted > 0 { reloadIndexFromStore() }   // skip the refetch/reload when nothing changed
+    }
+
+    func clearHistory() {
+        pollQueue.async {
+            try? self.store.deleteAll()
+            self.reloadIndexFromStore()
+        }
     }
 
     private func reloadIndexFromStore() {
-        let items = (try? store.recent(limit: 1000)) ?? []
+        let items = (try? store.recent(limit: Settings.maxItems)) ?? []
         DispatchQueue.main.async {
             self.index.replaceAll(items)
-            self.historyView.reload()
+            self.historyView.reload(preserveSelection: true)
         }
     }
 
@@ -68,14 +107,16 @@ final class AppCoordinator {
         panel.restorePreviousApp()
     }
 
-    private var didWarnNoAccessibility = false
-
     func paste(_ item: ClipboardItem) {
-        Paster.writeToPasteboard(item, imagesDir: imagesDir)
+        let wrote = Paster.writeToPasteboard(item, imagesDir: imagesDir)
         panel.hide()
         panel.restorePreviousApp()
+        guard wrote else {
+            NSLog("Momo: nothing to paste for item \(item.id) (missing blob or empty payload)")
+            return
+        }
         guard Paster.isAccessibilityTrusted else {
-            warnAccessibilityOnce()   // item is already on the clipboard; can't synth the keystroke
+            warnAccessibilityOnce()   // item is on the clipboard; can't synthesize the keystroke
             return
         }
         // Give focus a beat to return, then synth Cmd+V.

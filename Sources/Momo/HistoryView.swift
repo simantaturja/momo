@@ -6,6 +6,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     private let imagesDir: String
     private let onChoose: (ClipboardItem) -> Void
     private let onPinToggle: (ClipboardItem) -> Void
+    private let onDelete: (ClipboardItem) -> Void
     private let onCancel: () -> Void
 
     private let searchField = NSSearchField()
@@ -15,10 +16,11 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     init(index: HistoryIndex, imagesDir: String,
          onChoose: @escaping (ClipboardItem) -> Void,
          onPinToggle: @escaping (ClipboardItem) -> Void,
+         onDelete: @escaping (ClipboardItem) -> Void,
          onCancel: @escaping () -> Void) {
         self.index = index; self.imagesDir = imagesDir
         self.onChoose = onChoose; self.onPinToggle = onPinToggle
-        self.onCancel = onCancel
+        self.onDelete = onDelete; self.onCancel = onCancel
         super.init(frame: .zero)
         buildUI()
         reload()
@@ -59,21 +61,36 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     func focusSearch() { window?.makeFirstResponder(searchField) }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.modifierFlags.contains(.command), event.charactersIgnoringModifiers == "p" {
-            let row = tableView.selectedRow
-            if row >= 0, row < results.count {
-                onPinToggle(results[row])
-                return true
+        if event.modifierFlags.contains(.command) {
+            if event.charactersIgnoringModifiers == "p", let item = selectedItem() {
+                onPinToggle(item); return true
+            }
+            if event.keyCode == 51, let item = selectedItem() {   // ⌘⌫ deletes the selected item
+                onDelete(item); return true
             }
         }
         return super.performKeyEquivalent(with: event)
     }
 
-    func reload() {
+    private func selectedItem() -> ClipboardItem? {
+        let row = tableView.selectedRow
+        return (row >= 0 && row < results.count) ? results[row] : nil
+    }
+
+    /// Re-run the query and refresh the table. `preserveSelection` keeps the currently
+    /// selected item selected across data-driven refreshes (a background capture must not
+    /// yank the user's selection back to the top); search-driven reloads pass false so the
+    /// best match is highlighted.
+    func reload(preserveSelection: Bool = false) {
         let start = DispatchTime.now()
+        let keep = preserveSelection ? selectedItem()?.id : nil
         results = index.search(searchField.stringValue)
         tableView.reloadData()
-        if !results.isEmpty { tableView.selectRowIndexes([0], byExtendingSelection: false) }
+        if let keep, let idx = results.firstIndex(where: { $0.id == keep }) {
+            tableView.selectRowIndexes([idx], byExtendingSelection: false)
+        } else if !results.isEmpty {
+            tableView.selectRowIndexes([0], byExtendingSelection: false)
+        }
         let ms = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
         if ms > 16 { NSLog("Momo search+render slow: \(ms) ms for \(results.count)") }
     }
@@ -100,9 +117,8 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     }
 
     @objc private func chooseSelected() {
-        let row = tableView.selectedRow
-        guard row >= 0, row < results.count else { return }
-        onChoose(results[row])
+        guard let item = selectedItem() else { return }
+        onChoose(item)
     }
 
     // DataSource / Delegate
