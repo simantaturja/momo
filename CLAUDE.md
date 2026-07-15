@@ -63,7 +63,12 @@ something at the top must dispatch each step:
    gets `swift build` + `swift test` green. It does not self-approve or commit.
 2. Dispatch **`momo-reviewer`** — independently attacks the diff in fresh context; never writes code.
 3. Feed findings back to `momo-developer`; re-dispatch both until the reviewer is clean. Then
-   a human commits. (To automate this loop, use a `Workflow` script — see the last CLAUDE note.)
+   a human commits.
+
+To automate steps 1–3, run the saved workflow:
+`Workflow({ name: "momo-build-review", args: "<task>" })` (or `args: { task, maxRounds }`).
+It loops build → review → fix until the reviewer is clean (or maxRounds, default 3), leaving
+a reviewed, green working tree for you to commit. It never commits.
 
 The developer and reviewer are peers: the developer never grades its own work; the reviewer
 never fixes what it flags. Caveat worth remembering — the developer authors *both* the code and
