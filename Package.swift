@@ -2,32 +2,32 @@
 import PackageDescription
 
 let package = Package(
-    name: "Pastal",
+    name: "Momo",
     platforms: [.macOS(.v13)],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
     ],
     targets: [
         .target(
-            name: "PastalCore",
+            name: "MomoCore",
             dependencies: [.product(name: "GRDB", package: "GRDB.swift")]
         ),
         .executableTarget(
-            name: "Pastal",
-            dependencies: ["PastalCore"],
+            name: "Momo",
+            dependencies: ["MomoCore"],
             exclude: ["Info.plist"],
             linkerSettings: [
                 .unsafeFlags([
                     "-Xlinker", "-sectcreate",
                     "-Xlinker", "__TEXT",
                     "-Xlinker", "__info_plist",
-                    "-Xlinker", "Sources/Pastal/Info.plist",
+                    "-Xlinker", "Sources/Momo/Info.plist",
                 ])
             ]
         ),
         .testTarget(
-            name: "PastalCoreTests",
-            dependencies: ["PastalCore"]
+            name: "MomoCoreTests",
+            dependencies: ["MomoCore"]
         ),
     ]
 )

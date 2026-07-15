@@ -1,11 +1,11 @@
 import XCTest
-@testable import PastalCore
+@testable import MomoCore
 
 final class ClipboardItemTests: XCTestCase {
     func testHashIsStableAndPayloadSensitive() {
-        let a = ClipboardItem.contentHash(kind: .text, text: "hello", imagePath: nil, filePaths: [])
-        let b = ClipboardItem.contentHash(kind: .text, text: "hello", imagePath: nil, filePaths: [])
-        let c = ClipboardItem.contentHash(kind: .text, text: "world", imagePath: nil, filePaths: [])
+        let a = ClipboardItem.contentHash(kind: .text, text: "hello", imageHash: nil, filePaths: [])
+        let b = ClipboardItem.contentHash(kind: .text, text: "hello", imageHash: nil, filePaths: [])
+        let c = ClipboardItem.contentHash(kind: .text, text: "world", imageHash: nil, filePaths: [])
         XCTAssertEqual(a, b)          // same payload -> same hash
         XCTAssertNotEqual(a, c)       // different payload -> different hash
     }

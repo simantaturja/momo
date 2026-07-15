@@ -1,5 +1,5 @@
 import AppKit
-import PastalCore
+import MomoCore
 
 final class NSPasteboardReader: PasteboardReading {
     private let pb = NSPasteboard.general

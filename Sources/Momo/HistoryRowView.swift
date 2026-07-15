@@ -1,5 +1,5 @@
 import AppKit
-import PastalCore
+import MomoCore
 
 final class HistoryRowView: NSTableCellView {
     private let label = NSTextField(labelWithString: "")

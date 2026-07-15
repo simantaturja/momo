@@ -1,5 +1,5 @@
 import AppKit
-import PastalCore
+import MomoCore
 
 final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
     private let index: HistoryIndex
@@ -75,7 +75,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         tableView.reloadData()
         if !results.isEmpty { tableView.selectRowIndexes([0], byExtendingSelection: false) }
         let ms = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
-        if ms > 16 { NSLog("Pastal search+render slow: \(ms) ms for \(results.count)") }
+        if ms > 16 { NSLog("Momo search+render slow: \(ms) ms for \(results.count)") }
     }
 
     // Search typing

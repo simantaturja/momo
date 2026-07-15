@@ -1,11 +1,11 @@
 import XCTest
-@testable import PastalCore
+@testable import MomoCore
 
 final class HistoryIndexTests: XCTestCase {
     private func item(_ s: String, at t: TimeInterval) -> ClipboardItem {
         ClipboardItem(kind: .text, preview: s, text: s, imagePath: nil, filePaths: [],
                       createdAt: Date(timeIntervalSince1970: t), pinned: false,
-                      contentHash: ClipboardItem.contentHash(kind: .text, text: s, imagePath: nil, filePaths: []))
+                      contentHash: ClipboardItem.contentHash(kind: .text, text: s, imageHash: nil, filePaths: []))
     }
 
     func testFuzzySubsequenceMatches() {

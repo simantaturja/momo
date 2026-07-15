@@ -1,5 +1,5 @@
 import XCTest
-@testable import PastalCore
+@testable import MomoCore
 
 final class PrivacyFilterTests: XCTestCase {
     func testConcealedDropped() {

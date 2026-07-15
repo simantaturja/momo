@@ -1,3 +1,3 @@
-public enum PastalCore {
+public enum MomoCore {
     public static let version = "0.1.0"
 }

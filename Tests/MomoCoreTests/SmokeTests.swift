@@ -1,8 +1,8 @@
 import XCTest
-@testable import PastalCore
+@testable import MomoCore
 
 final class SmokeTests: XCTestCase {
     func testVersionExists() {
-        XCTAssertEqual(PastalCore.version, "0.1.0")
+        XCTAssertEqual(MomoCore.version, "0.1.0")
     }
 }

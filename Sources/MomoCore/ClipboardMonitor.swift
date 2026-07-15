@@ -24,22 +24,24 @@ public final class ClipboardMonitor {
 
     private func buildItem(now: Date) -> ClipboardItem? {
         if let data = pasteboard.imageData() {
+            // Identity is the image bytes; the blob filename is incidental and must not enter the hash.
+            let imageHash = ClipboardItem.imageHash(data)
             guard let path = try? writeImageBlob(data) else { return nil }
             return ClipboardItem(kind: .image, preview: "Image", text: nil,
                                  imagePath: path, filePaths: [], createdAt: now, pinned: false,
-                                 contentHash: ClipboardItem.contentHash(kind: .image, text: nil, imagePath: path, filePaths: []))
+                                 contentHash: ClipboardItem.contentHash(kind: .image, text: nil, imageHash: imageHash, filePaths: []))
         }
         let files = pasteboard.fileURLs()
         if !files.isEmpty {
             let preview = files.map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")
             return ClipboardItem(kind: .file, preview: preview, text: nil,
                                  imagePath: nil, filePaths: files, createdAt: now, pinned: false,
-                                 contentHash: ClipboardItem.contentHash(kind: .file, text: nil, imagePath: nil, filePaths: files))
+                                 contentHash: ClipboardItem.contentHash(kind: .file, text: nil, imageHash: nil, filePaths: files))
         }
         guard let s = pasteboard.string(), !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let preview = String(s.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
         return ClipboardItem(kind: .text, preview: preview, text: s,
                              imagePath: nil, filePaths: [], createdAt: now, pinned: false,
-                             contentHash: ClipboardItem.contentHash(kind: .text, text: s, imagePath: nil, filePaths: []))
+                             contentHash: ClipboardItem.contentHash(kind: .text, text: s, imageHash: nil, filePaths: []))
     }
 }

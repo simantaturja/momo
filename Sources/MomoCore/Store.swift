@@ -34,6 +34,9 @@ public final class Store {
                 sql: "SELECT id FROM items WHERE contentHash = ?", arguments: [item.contentHash]) {
                 try db.execute(sql: "UPDATE items SET createdAt = ? WHERE id = ?",
                                arguments: [item.createdAt.timeIntervalSince1970, existingId])
+                // Dedupe hit: the existing row keeps its own blob, so the just-written
+                // incoming image blob is redundant — reclaim it instead of orphaning it.
+                if item.kind == .image { removeBlob(item.imagePath) }
             } else {
                 try db.execute(sql: """
                     INSERT INTO items (id, kind, preview, text, imagePath, filePaths, createdAt, pinned, contentHash, imageBytes)

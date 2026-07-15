@@ -1,8 +1,20 @@
 import AppKit
-import PastalCore
+import ApplicationServices
+import MomoCore
 import Carbon
 
 enum Paster {
+    /// Whether the process is trusted for Accessibility. Synthetic keystrokes
+    /// (`synthesizePaste`) are silently dropped by macOS unless this is true.
+    static var isAccessibilityTrusted: Bool { AXIsProcessTrusted() }
+
+    /// Shows the system Accessibility prompt if not yet trusted; no-op once granted.
+    static func promptForAccessibilityIfNeeded() {
+        guard !AXIsProcessTrusted() else { return }
+        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
+    }
+
     static func writeToPasteboard(_ item: ClipboardItem, imagesDir: String) {
         let pb = NSPasteboard.general
         pb.clearContents()

@@ -14,17 +14,24 @@ final class HotkeyManager {
         self.handler = handler
     }
 
-    func register() {
+    /// Returns whether the global hotkey was successfully registered. Fails most
+    /// commonly when another app already owns the same shortcut.
+    @discardableResult
+    func register() -> Bool {
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, userData in
+        let installStatus = InstallEventHandler(GetApplicationEventTarget(), { _, _, userData in
             let mgr = Unmanaged<HotkeyManager>.fromOpaque(userData!).takeUnretainedValue()
             mgr.handler()
             return noErr
         }, 1, &eventType, selfPtr, &eventHandler)
 
         let hotKeyID = EventHotKeyID(signature: OSType(0x50415354 /* 'PAST' */), id: 1)
-        RegisterEventHotKey(keyCode, modifiers, hotKeyID, GetApplicationEventTarget(), 0, &hotKeyRef)
+        let registerStatus = RegisterEventHotKey(keyCode, modifiers, hotKeyID, GetApplicationEventTarget(), 0, &hotKeyRef)
+
+        if installStatus != noErr { NSLog("Momo: InstallEventHandler failed (OSStatus \(installStatus))") }
+        if registerStatus != noErr { NSLog("Momo: RegisterEventHotKey failed (OSStatus \(registerStatus)) — shortcut likely already in use") }
+        return installStatus == noErr && registerStatus == noErr
     }
 
     func unregister() {

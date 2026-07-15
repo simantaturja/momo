@@ -30,11 +30,22 @@ public struct ClipboardItem: Identifiable, Equatable, Sendable {
     }
 
     /// Deterministic hash of the payload, used as the dedupe key.
+    /// For images, pass `imageHash` (a digest of the image bytes, via `imageHash(_:)`) —
+    /// never the storage path, which is a fresh UUID on every capture and would defeat dedupe.
     public static func contentHash(kind: ItemKind, text: String?,
-                                   imagePath: String?, filePaths: [String]) -> String {
-        let canonical = "\(kind.rawValue)|\(text ?? "")|\(imagePath ?? "")|\(filePaths.joined(separator: ","))"
+                                   imageHash: String?, filePaths: [String]) -> String {
+        let canonical = "\(kind.rawValue)|\(text ?? "")|\(imageHash ?? "")|\(filePaths.joined(separator: ","))"
+        return djb2Hex(canonical.utf8)
+    }
+
+    /// Content-identity digest of raw image bytes, so re-copying the same image dedupes.
+    public static func imageHash(_ data: Data) -> String {
+        djb2Hex(data)
+    }
+
+    private static func djb2Hex<S: Sequence>(_ bytes: S) -> String where S.Element == UInt8 {
         var hash: UInt64 = 5381
-        for byte in canonical.utf8 {
+        for byte in bytes {
             hash = (hash &* 33) ^ UInt64(byte)   // djb2, deterministic
         }
         return String(hash, radix: 16)
