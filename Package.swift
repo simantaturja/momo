@@ -14,7 +14,16 @@ let package = Package(
         ),
         .executableTarget(
             name: "Pastal",
-            dependencies: ["PastalCore"]
+            dependencies: ["PastalCore"],
+            exclude: ["Info.plist"],
+            linkerSettings: [
+                .unsafeFlags([
+                    "-Xlinker", "-sectcreate",
+                    "-Xlinker", "__TEXT",
+                    "-Xlinker", "__info_plist",
+                    "-Xlinker", "Sources/Pastal/Info.plist",
+                ])
+            ]
         ),
         .testTarget(
             name: "PastalCoreTests",

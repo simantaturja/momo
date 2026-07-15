@@ -1,3 +1,7 @@
-import PastalCore
+import AppKit
 
-print("Pastal \(PastalCore.version)")
+let app = NSApplication.shared
+let delegate = AppDelegate()
+app.delegate = delegate
+app.setActivationPolicy(.accessory)   // menubar accessory, no Dock icon
+app.run()
