@@ -81,7 +81,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { _ in
             let body = NSBezierPath()
             body.move(to: NSPoint(x: 2.6, y: 4.0))
-            body.line(to: NSPoint(x: 15.4, y: 4.0))
+            body.curve(to: NSPoint(x: 15.4, y: 4.0),           // rounded belly, not a flat base
+                       controlPoint1: NSPoint(x: 5.5, y: 2.3), controlPoint2: NSPoint(x: 12.5, y: 2.3))
             body.curve(to: NSPoint(x: 11.6, y: 12.0),
                        controlPoint1: NSPoint(x: 16.6, y: 7.8), controlPoint2: NSPoint(x: 14.8, y: 11.0))
             body.curve(to: NSPoint(x: 9.9, y: 13.3),
