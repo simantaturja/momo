@@ -39,6 +39,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         tableView.dataSource = self
         tableView.delegate = self
         tableView.target = self
+        tableView.action = #selector(rowClicked)
         tableView.doubleAction = #selector(chooseSelected)
 
         let scroll = NSScrollView()
@@ -119,6 +120,13 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     @objc private func chooseSelected() {
         guard let item = selectedItem() else { return }
         onChoose(item)
+    }
+
+    /// A single click selects the row but makes the table the first responder, which
+    /// would strand ↵/Esc/↑↓ (they route through the search field's delegate). Hand
+    /// first responder back to the search field so keys keep working; selection stays.
+    @objc private func rowClicked() {
+        window?.makeFirstResponder(searchField)
     }
 
     // DataSource / Delegate
