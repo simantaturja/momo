@@ -15,6 +15,8 @@ final class HistoryRowView: NSTableCellView {
         thumb.translatesAutoresizingMaskIntoConstraints = false
         label.translatesAutoresizingMaskIntoConstraints = false
         label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 1
+        label.cell?.usesSingleLineMode = true   // collapse embedded newlines; one row, one line
         addSubview(thumb); addSubview(label)
         NSLayoutConstraint.activate([
             thumb.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
