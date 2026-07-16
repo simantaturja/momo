@@ -2,12 +2,14 @@ import AppKit
 
 final class PanelController: NSObject, NSWindowDelegate {
     let panel: NSPanel
+    private let content: NSView
     private(set) var previousApp: NSRunningApplication?
     var onResignKey: (() -> Void)?
 
     init(contentView: NSView) {
+        content = contentView
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 400),
+            contentRect: NSRect(x: 0, y: 0, width: 600, height: 420),
             styleMask: [.nonactivatingPanel, .titled, .fullSizeContentView],
             backing: .buffered, defer: false)
         panel.titleVisibility = .hidden
@@ -16,7 +18,28 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.level = .floating
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false      // never torn down -> pre-warmed
-        panel.contentView = contentView
+
+        // Translucent rounded card: a vibrancy view is the window's content, with the
+        // history view pinned inside it. Built once here (pre-warm) — nothing on show().
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        let effect = NSVisualEffectView()
+        effect.material = .popover
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        effect.wantsLayer = true
+        effect.layer?.cornerRadius = 12
+        effect.layer?.masksToBounds = true
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        effect.addSubview(contentView)
+        NSLayoutConstraint.activate([
+            contentView.topAnchor.constraint(equalTo: effect.topAnchor),
+            contentView.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+            contentView.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+        ])
+        panel.contentView = effect
         panel.center()
         super.init()
         panel.delegate = self
@@ -41,7 +64,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         let ms = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
         NSLog("Momo open render: \(ms) ms")
         NSApp.activate(ignoringOtherApps: true)
-        (panel.contentView as? HistoryView)?.focusSearch()
+        (content as? HistoryView)?.focusSearch()
     }
 
     func hide() {

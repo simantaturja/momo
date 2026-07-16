@@ -1,6 +1,41 @@
 import AppKit
 import MomoCore
 
+/// A search field that reports focus changes so its capsule can draw an accent ring.
+private final class FocusRingSearchField: NSSearchField {
+    var onFocusChange: ((Bool) -> Void)?
+    override func becomeFirstResponder() -> Bool {
+        let ok = super.becomeFirstResponder()
+        if ok { onFocusChange?(true) }
+        return ok
+    }
+    override func resignFirstResponder() -> Bool {
+        let ok = super.resignFirstResponder()
+        if ok { onFocusChange?(false) }
+        return ok
+    }
+}
+
+/// Rounded filled capsule that hosts the search field; draws a 1.5pt accent ring when focused.
+/// Drawing (not layer CGColors) so the neutral fill and accent ring track light/dark natively.
+private final class SearchCapsule: NSView {
+    var focused = false { didSet { needsDisplay = true } }
+    override func draw(_ dirtyRect: NSRect) {
+        let r = bounds.height / 2
+        NSBezierPath(roundedRect: bounds, xRadius: r, yRadius: r).fill(with: Theme.searchFill)
+        guard focused else { return }
+        let ringRect = bounds.insetBy(dx: 0.75, dy: 0.75)
+        let ring = NSBezierPath(roundedRect: ringRect, xRadius: ringRect.height / 2, yRadius: ringRect.height / 2)
+        ring.lineWidth = 1.5
+        Theme.accent.setStroke()
+        ring.stroke()
+    }
+}
+
+private extension NSBezierPath {
+    func fill(with color: NSColor) { color.setFill(); fill() }
+}
+
 final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
     private let index: HistoryIndex
     private let imagesDir: String
@@ -9,8 +44,13 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     private let onDelete: (ClipboardItem) -> Void
     private let onCancel: () -> Void
 
-    private let searchField = NSSearchField()
+    private let searchField = FocusRingSearchField()
+    private let capsule = SearchCapsule()
     private let tableView = NSTableView()
+    private let emptyEmoji = NSTextField(labelWithString: "🥟")
+    private let emptyTitle = NSTextField(labelWithString: "")
+    private let emptySubtitle = NSTextField(labelWithString: "")
+    private let emptyStack = NSStackView()
     private var results: [ClipboardItem] = []
 
     init(index: HistoryIndex, imagesDir: String,
@@ -28,14 +68,41 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     required init?(coder: NSCoder) { fatalError() }
 
     private func buildUI() {
+        // Search capsule: leading magnifier + borderless field. Keep the free clear button.
         searchField.delegate = self
         searchField.translatesAutoresizingMaskIntoConstraints = false
+        searchField.isBezeled = false
+        searchField.isBordered = false
+        searchField.drawsBackground = false
+        searchField.focusRingType = .none
+        searchField.font = .systemFont(ofSize: 15)
+        (searchField.cell as? NSSearchFieldCell)?.searchButtonCell = nil   // we draw our own magnifier
+        searchField.onFocusChange = { [weak self] focused in self?.capsule.focused = focused }
+
+        let magnifier = NSImageView()
+        magnifier.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
+        magnifier.contentTintColor = Theme.badgeSymbol
+        magnifier.translatesAutoresizingMaskIntoConstraints = false
+
+        capsule.translatesAutoresizingMaskIntoConstraints = false
+        capsule.addSubview(magnifier); capsule.addSubview(searchField)
+        NSLayoutConstraint.activate([
+            magnifier.leadingAnchor.constraint(equalTo: capsule.leadingAnchor, constant: 14),
+            magnifier.centerYAnchor.constraint(equalTo: capsule.centerYAnchor),
+            magnifier.widthAnchor.constraint(equalToConstant: 16),
+            magnifier.heightAnchor.constraint(equalToConstant: 16),
+            searchField.leadingAnchor.constraint(equalTo: magnifier.trailingAnchor, constant: 8),
+            searchField.trailingAnchor.constraint(equalTo: capsule.trailingAnchor, constant: -10),
+            searchField.centerYAnchor.constraint(equalTo: capsule.centerYAnchor),
+        ])
 
         let col = NSTableColumn(identifier: .init("main"))
         col.resizingMask = .autoresizingMask
         tableView.addTableColumn(col)
         tableView.headerView = nil
-        tableView.rowHeight = 32
+        tableView.rowHeight = 44
+        tableView.style = .plain
+        tableView.backgroundColor = .clear
         tableView.dataSource = self
         tableView.delegate = self
         tableView.target = self
@@ -45,18 +112,74 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         let scroll = NSScrollView()
         scroll.documentView = tableView
         scroll.hasVerticalScroller = true
+        scroll.drawsBackground = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
 
-        addSubview(searchField); addSubview(scroll)
+        buildEmptyState()
+        let footer = buildFooter()
+
+        addSubview(capsule); addSubview(scroll); addSubview(emptyStack); addSubview(footer)
         NSLayoutConstraint.activate([
-            searchField.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            searchField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            searchField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            scroll.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 8),
+            capsule.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            capsule.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            capsule.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            capsule.heightAnchor.constraint(equalToConstant: 40),
+
+            scroll.topAnchor.constraint(equalTo: capsule.bottomAnchor, constant: 8),
             scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
+            scroll.bottomAnchor.constraint(equalTo: footer.topAnchor),
+
+            emptyStack.centerXAnchor.constraint(equalTo: scroll.centerXAnchor),
+            emptyStack.centerYAnchor.constraint(equalTo: scroll.centerYAnchor),
+            emptyStack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 24),
+            emptyStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -24),
+
+            footer.leadingAnchor.constraint(equalTo: leadingAnchor),
+            footer.trailingAnchor.constraint(equalTo: trailingAnchor),
+            footer.bottomAnchor.constraint(equalTo: bottomAnchor),
+            footer.heightAnchor.constraint(equalToConstant: 28),
         ])
+    }
+
+    private func buildEmptyState() {
+        emptyEmoji.font = .systemFont(ofSize: 44)
+        emptyEmoji.alignment = .center
+        emptyTitle.font = .systemFont(ofSize: 15, weight: .medium)
+        emptyTitle.textColor = .secondaryLabelColor
+        emptyTitle.alignment = .center
+        emptySubtitle.font = .systemFont(ofSize: 13)
+        emptySubtitle.textColor = Theme.dimText
+        emptySubtitle.alignment = .center
+        emptyStack.orientation = .vertical
+        emptyStack.alignment = .centerX
+        emptyStack.spacing = 8
+        emptyStack.translatesAutoresizingMaskIntoConstraints = false
+        emptyStack.addArrangedSubview(emptyEmoji)
+        emptyStack.addArrangedSubview(emptyTitle)
+        emptyStack.addArrangedSubview(emptySubtitle)
+        emptyStack.isHidden = true
+    }
+
+    private func buildFooter() -> NSView {
+        let footer = NSView()
+        footer.translatesAutoresizingMaskIntoConstraints = false
+        let separator = NSBox()
+        separator.boxType = .separator
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        let hint = NSTextField(labelWithString: "↑↓ move · ↵ copy · ⌘P pin · ⌘⌫ delete")
+        hint.font = .systemFont(ofSize: 11)
+        hint.textColor = Theme.dimText
+        hint.translatesAutoresizingMaskIntoConstraints = false
+        footer.addSubview(separator); footer.addSubview(hint)
+        NSLayoutConstraint.activate([
+            separator.topAnchor.constraint(equalTo: footer.topAnchor),
+            separator.leadingAnchor.constraint(equalTo: footer.leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: footer.trailingAnchor),
+            hint.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 12),
+            hint.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
+        ])
+        return footer
     }
 
     func focusSearch() { window?.makeFirstResponder(searchField) }
@@ -92,8 +215,25 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         } else if !results.isEmpty {
             tableView.selectRowIndexes([0], byExtendingSelection: false)
         }
+        updateEmptyState()
         let ms = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
         if ms > 16 { NSLog("Momo search+render slow: \(ms) ms for \(results.count)") }
+    }
+
+    private func updateEmptyState() {
+        guard results.isEmpty else { emptyStack.isHidden = true; return }
+        let query = searchField.stringValue
+        if query.isEmpty {
+            emptyEmoji.isHidden = false
+            emptySubtitle.isHidden = false
+            emptyTitle.stringValue = "Nothing copied yet"
+            emptySubtitle.stringValue = "Copy anything — it'll show up here."
+        } else {
+            emptyEmoji.isHidden = true
+            emptySubtitle.isHidden = true
+            emptyTitle.stringValue = "No matches for \"\(query)\""
+        }
+        emptyStack.isHidden = false
     }
 
     // Search typing
@@ -138,5 +278,12 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         }()
         cell.configure(results[row], imagesDir: imagesDir)
         return cell
+    }
+
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let id = NSUserInterfaceItemIdentifier("pill")
+        return (tableView.makeView(withIdentifier: id, owner: self) as? PillRowView) ?? {
+            let v = PillRowView(); v.identifier = id; return v
+        }()
     }
 }
