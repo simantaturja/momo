@@ -24,7 +24,7 @@ Native Swift + AppKit. No Electron. No lag. No telemetry.
         │     🖼  Screenshot 2026-07-16.png         │
         │     📁  Package.swift, README.md          │
         └─────────────────────────────────────────┘
-           ↑↓ move   ↵ paste   ⌘P pin   ⌘⌫ delete
+           ↑↓ move   ↵ copy   ⌘P pin   ⌘⌫ delete
 ```
 
 ---
@@ -56,8 +56,8 @@ and filters faster than you can think.
 - 🔒 **Privacy first** — anything a source app marks *concealed* or *transient*
   (1Password, other password managers) is never stored. Nothing ever leaves your machine.
 - 📌 **Pin** what you reuse, **delete** (⌘⌫) what you don't, **Clear History** when you want a clean slate.
-- 🪄 **Paste where you were** — pick an item and Momo restores your previous app and presses
-  ⌘V for you.
+- 🪄 **Copy and get out of the way** — pick an item and Momo copies it, closes, and restores
+  your previous app; press ⌘V there to paste.
 - 🪫 **No battery drain** — it watches a single integer a few times a second and only reads
   the clipboard when that number changes. Idle CPU stays near zero.
 
@@ -89,9 +89,8 @@ swift run Momo               # build and launch
 Momo has **no Dock icon** — it runs as a menu-bar accessory. Look for the 🥟 in your menu
 bar. From there: **Show Momo**, **Launch at Login**, and **Clear History…**.
 
-On first launch macOS will ask for **Accessibility** permission — this is what lets Momo
-press ⌘V for you. Grant it under *System Settings ▸ Privacy & Security ▸ Accessibility*.
-(Skip it and Momo still works: your pick lands on the clipboard and you press ⌘V yourself.)
+Momo needs no special permissions: choosing an item copies it to the clipboard and you paste
+with ⌘V yourself. (No Accessibility grant, no synthesized keystrokes.)
 
 ## Usage
 
@@ -100,7 +99,7 @@ press ⌘V for you. Grant it under *System Settings ▸ Privacy & Security ▸ A
 | Anywhere | **⌘⇧V** | Open / close the history panel |
 | Panel | *type* | Fuzzy-filter the history |
 | Panel | **↑ / ↓** | Move selection |
-| Panel | **↵** | Paste the selected item |
+| Panel | **↵** | Copy the selected item & close — then ⌘V in your app to paste |
 | Panel | **⌘P** | Pin / unpin the selected item |
 | Panel | **⌘⌫** | Delete the selected item |
 | Panel | **Esc** | Dismiss (returns focus to your previous app) |
