@@ -1,8 +1,9 @@
 import AppKit
 
-final class PanelController {
+final class PanelController: NSObject, NSWindowDelegate {
     let panel: NSPanel
     private(set) var previousApp: NSRunningApplication?
+    var onResignKey: (() -> Void)?
 
     init(contentView: NSView) {
         panel = NSPanel(
@@ -17,6 +18,17 @@ final class PanelController {
         panel.isReleasedWhenClosed = false      // never torn down -> pre-warmed
         panel.contentView = contentView
         panel.center()
+        super.init()
+        panel.delegate = self
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        // Dismiss on focus loss (click-outside). Re-check async so a transient key
+        // flutter during show() does not dismiss the freshly-opened panel.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.panel.isVisible, !self.panel.isKeyWindow else { return }
+            self.onResignKey?()
+        }
     }
 
     func toggle() { panel.isVisible ? hide() : show() }

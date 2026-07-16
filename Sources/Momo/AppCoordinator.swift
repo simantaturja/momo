@@ -48,7 +48,13 @@ final class AppCoordinator {
         },
         onCancel: { [weak self] in self?.dismiss() }
     )
-    lazy var panel = PanelController(contentView: historyView)
+    lazy var panel: PanelController = {
+        let controller = PanelController(contentView: historyView)
+        // Click-outside: hide only. Don't restorePreviousApp() — the user is
+        // intentionally moving to another app; reactivating would yank focus.
+        controller.onResignKey = { [weak controller] in controller?.hide() }
+        return controller
+    }()
 
     init() throws {
         imagesDir = Self.imagesDirPath
