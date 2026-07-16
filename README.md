@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🥟 Momo
+<img src="assets/logo.svg" alt="Momo" width="120" />
+
+# Momo
 
 **A blazingly fast clipboard history for macOS that lives in your menu bar.**
 
