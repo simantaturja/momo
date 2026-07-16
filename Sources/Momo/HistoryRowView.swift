@@ -88,7 +88,7 @@ final class HistoryRowView: NSTableCellView {
     }
 
     func configure(_ item: ClipboardItem, imagesDir: String) {
-        label.stringValue = item.preview
+        label.stringValue = PreviewText.singleLine(item.preview)
         timeLabel.stringValue = RelativeTime.format(item.createdAt, now: Date())
         badge.pinned = item.pinned
 
