@@ -134,19 +134,6 @@ Everything is **local** and stays local. History lives in
   FileVault. Momo is intentionally unsandboxed (a sandboxed app can't drive a global hotkey
   or synthesize ⌘V into other apps).
 
-## Momo vs. Maccy
-
-Maccy is a mature, well-built clipboard manager; Momo isn't trying to out-feature it. The
-edge is narrow and deliberate — move every expensive operation off the two paths you wait on.
-
-| You feel… | Momo | Typical menu-based managers |
-|---|---|---|
-| Popup opens instantly | Pre-warmed panel, built once | Rebuild/relayout the UI per open |
-| Typing filters instantly | RAM-only fuzzy index | Filter over a growing store on the main thread |
-| No battery drain | Poll one integer, read on change | Heavier / foreground monitoring |
-| No duplicate clutter | Content-hash dedupe-to-top | Varies |
-| Secrets stay secret | Ingest-time privacy gate | Varies |
-
 ## Architecture
 
 Two targets, one clean seam:

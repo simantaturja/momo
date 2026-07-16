@@ -1,8 +1,8 @@
-# Momo — Tech Jargon & What We Improve Over Maccy
+# Momo — Tech Jargon & Design Rationale
 
 Two audiences, one doc. Each concept is explained **simply** (plain-language), then
 **technically** (what actually happens), then the **correlation** — how the simple idea
-maps to the technical mechanism and why it beats what Maccy does.
+maps to the technical mechanism and why it's fast.
 
 ---
 
@@ -22,7 +22,7 @@ app without a full app activation.
 **Correlation:** "Instant" = zero work on the hot path. Every allocation and layout
 computation is paid once at startup, never on open.
 
-> **Maccy today:** rebuilds/repopulates its menu-based UI when invoked, so open cost
+> **Typical menu-based managers** rebuild/repopulate their UI when invoked, so open cost
 > scales with history size and does layout work on the main thread each time. That
 > per-open work is exactly the "popup open delay" you feel. Momo moves that cost to
 > launch, once.
@@ -44,9 +44,9 @@ never queried on a keystroke. The table diff-updates rather than fully rebuildin
 computation. Disk I/O and heavy work are structurally impossible on that path because
 the index has no reference to the database.
 
-> **Maccy today:** filtering has been reported to jank on large histories. Momo's
-> hard separation — `HistoryIndex` (speed, RAM-only) vs `Store` (durability, disk,
-> background-only) — makes a slow keystroke architecturally impossible.
+> **Typical menu-based managers** can jank on large histories. Momo's hard separation —
+> `HistoryIndex` (speed, RAM-only) vs `Store` (durability, disk, background-only) —
+> makes a slow keystroke architecturally impossible.
 
 ---
 
@@ -179,17 +179,15 @@ that control; the alternatives abstract it away.
 
 ## Summary table
 
-| You feel | Momo mechanism | Maccy pain it removes |
-|---|---|---|
-| Popup opens instantly | Pre-warmed `NSPanel` (build once) | Per-open UI rebuild/layout |
-| Typing filters instantly | RAM-only `HistoryIndex` + fuzzy match | Main-thread filter over growing store |
-| No battery drain | Background `changeCount` poll | Aggressive/foreground monitoring |
-| Passwords never stored | `PrivacyFilter` ingest gate | — (parity/hardening) |
-| No duplicate clutter | Content-hash dedupe-to-top | — (parity) |
-| Images don't lag | Disk blobs + lazy thumbnails + virtualization | Heavy items on the render/search path |
-| Pastes where you were | Focus stash + synthetic ⌘V | — (parity) |
+| You feel | Momo mechanism |
+|---|---|
+| Popup opens instantly | Pre-warmed `NSPanel` (build once) |
+| Typing filters instantly | RAM-only `HistoryIndex` + fuzzy match |
+| No battery drain | Background `changeCount` poll |
+| Passwords never stored | `PrivacyFilter` ingest gate |
+| No duplicate clutter | Content-hash dedupe-to-top |
+| Images don't lag | Disk blobs + lazy thumbnails + virtualization |
+| Pastes where you were | Focus stash + synthetic ⌘V |
 
-> **Caveat:** Maccy is a mature, well-built app; its lag is a specific architectural
-> cost (work on the open/type hot paths), not general sloppiness. Momo's edge is
-> narrow and deliberate: move every expensive operation off the two paths a human
-> actually waits on.
+> Momo's edge is narrow and deliberate: move every expensive operation off the two
+> paths a human actually waits on — the popup opening, and a search keystroke.
