@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 460" width="640" height="460" role="img" aria-label="Momo clipboard history panel">
+  <defs>
+    <linearGradient id="panelBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3a3e"/>
+      <stop offset="1" stop-color="#2c2c30"/>
+    </linearGradient>
+    <filter id="panelShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+    <clipPath id="panelClip">
+      <rect x="20" y="20" width="600" height="420" rx="12"/>
+    </clipPath>
+    <style>
+      .ui { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
+    </style>
+  </defs>
+
+  <g filter="url(#panelShadow)">
+    <rect x="20" y="20" width="600" height="420" rx="12" fill="url(#panelBg)"/>
+  </g>
+
+  <g clip-path="url(#panelClip)">
+    <!-- search capsule -->
+    <rect x="32" y="32" width="576" height="36" rx="18" fill="#232326"/>
+    <rect x="32" y="32" width="576" height="36" rx="18" fill="none" stroke="#E8542B" stroke-width="1.5" opacity="0.9"/>
+    <circle cx="52" cy="50" r="5.5" fill="none" stroke="#8a8a90" stroke-width="1.6"/>
+    <line x1="56.3" y1="54.3" x2="60" y2="58" stroke="#8a8a90" stroke-width="1.6" stroke-linecap="round"/>
+
+    <!-- row 1: pinned link, selected-neutral -->
+    <g>
+      <rect x="32" y="80" width="26" height="26" rx="6" fill="#4a4a50"/>
+      <circle cx="55" cy="83" r="3.5" fill="#E8542B"/>
+      <text class="ui" x="45" y="98" font-size="11" fill="#c9c9cf" text-anchor="middle">🔗</text>
+      <text class="ui" x="72" y="97" font-size="13" fill="#e8e8ea">github.com/simantaturja/momo</text>
+      <text class="ui" x="596" y="97" font-size="11" fill="#8a8a90" text-anchor="end">2m</text>
+    </g>
+
+    <!-- row 2: selected pill (accent) -->
+    <rect x="32" y="114" width="576" height="34" rx="8" fill="#E8542B" opacity="0.18"/>
+    <g>
+      <rect x="32" y="117" width="26" height="26" rx="6" fill="#4a4a50"/>
+      <text class="ui" x="45" y="135" font-size="11" fill="#E8542B" text-anchor="middle">📄</text>
+      <text class="ui" x="72" y="135" font-size="13" fill="#f2f2f4">git rebase -i HEAD~3</text>
+      <text class="ui" x="596" y="135" font-size="11" fill="#8a8a90" text-anchor="end">5m</text>
+    </g>
+
+    <!-- row 3: image thumbnail -->
+    <g>
+      <rect x="32" y="155" width="26" height="26" rx="6" fill="#5b7fb8"/>
+      <text class="ui" x="45" y="173" font-size="11" fill="#e8e8ea" text-anchor="middle">🖼</text>
+      <text class="ui" x="72" y="173" font-size="13" fill="#e8e8ea">Screenshot 2026-07-16.png</text>
+      <text class="ui" x="596" y="173" font-size="11" fill="#8a8a90" text-anchor="end">12m</text>
+    </g>
+
+    <!-- row 4: files -->
+    <g>
+      <rect x="32" y="192" width="26" height="26" rx="6" fill="#4a4a50"/>
+      <text class="ui" x="45" y="210" font-size="11" fill="#c9c9cf" text-anchor="middle">📁</text>
+      <text class="ui" x="72" y="210" font-size="13" fill="#e8e8ea">Package.swift, README.md</text>
+      <text class="ui" x="596" y="210" font-size="11" fill="#8a8a90" text-anchor="end">20m</text>
+    </g>
+
+    <!-- row 5: command text -->
+    <g>
+      <rect x="32" y="229" width="26" height="26" rx="6" fill="#4a4a50"/>
+      <text class="ui" x="45" y="247" font-size="11" fill="#c9c9cf" text-anchor="middle">📄</text>
+      <text class="ui" x="72" y="247" font-size="13" fill="#e8e8ea">swift build &amp;&amp; swift test</text>
+      <text class="ui" x="596" y="247" font-size="11" fill="#8a8a90" text-anchor="end">1h</text>
+    </g>
+
+    <!-- row 6: text -->
+    <g>
+      <rect x="32" y="266" width="26" height="26" rx="6" fill="#4a4a50"/>
+      <text class="ui" x="45" y="284" font-size="11" fill="#c9c9cf" text-anchor="middle">📄</text>
+      <text class="ui" x="72" y="284" font-size="13" fill="#e8e8ea">brew tap simantaturja/momo</text>
+      <text class="ui" x="596" y="284" font-size="11" fill="#8a8a90" text-anchor="end">2h</text>
+    </g>
+
+    <!-- row 7: image thumbnail -->
+    <g>
+      <rect x="32" y="303" width="26" height="26" rx="6" fill="#6a9a6f"/>
+      <text class="ui" x="45" y="321" font-size="11" fill="#e8e8ea" text-anchor="middle">🖼</text>
+      <text class="ui" x="72" y="321" font-size="13" fill="#e8e8ea">IMG_0421.png</text>
+      <text class="ui" x="596" y="321" font-size="11" fill="#8a8a90" text-anchor="end">3h</text>
+    </g>
+
+    <!-- row 8: text -->
+    <g>
+      <rect x="32" y="340" width="26" height="26" rx="6" fill="#4a4a50"/>
+      <text class="ui" x="45" y="358" font-size="11" fill="#c9c9cf" text-anchor="middle">📄</text>
+      <text class="ui" x="72" y="358" font-size="13" fill="#e8e8ea">turja@cefalo.com</text>
+      <text class="ui" x="596" y="358" font-size="11" fill="#8a8a90" text-anchor="end">5h</text>
+    </g>
+
+    <!-- row 9: files -->
+    <g>
+      <rect x="32" y="377" width="26" height="26" rx="6" fill="#4a4a50"/>
+      <text class="ui" x="45" y="395" font-size="11" fill="#c9c9cf" text-anchor="middle">📁</text>
+      <text class="ui" x="72" y="395" font-size="13" fill="#e8e8ea">RELEASING.md</text>
+      <text class="ui" x="596" y="395" font-size="11" fill="#8a8a90" text-anchor="end">1d</text>
+    </g>
+
+    <!-- footer -->
+    <line x1="20" y1="412" x2="620" y2="412" stroke="#000" stroke-opacity="0.3" stroke-width="1"/>
+    <text class="ui" x="32" y="431" font-size="11" fill="#8a8a90">↑↓ move  ·  ↵ copy  ·  ⌘P pin  ·  ⌘⌫ delete</text>
+  </g>
+</svg>

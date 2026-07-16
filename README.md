@@ -16,18 +16,10 @@ Native Swift + AppKit. No Electron. No lag. No telemetry.
 
 </div>
 
-```
-              press ⌘⇧V, anywhere
-        ┌─────────────────────────────────────────┐
-        │  🔍 git                                   │
-        ├─────────────────────────────────────────┤
-        │  📌 📄  github.com/you/momo               │
-        │     📄  git rebase -i HEAD~3              │
-        │     🖼  Screenshot 2026-07-16.png         │
-        │     📁  Package.swift, README.md          │
-        └─────────────────────────────────────────┘
-           ↑↓ move   ↵ copy   ⌘P pin   ⌘⌫ delete
-```
+<p align="center">
+  <em>press ⌘⇧V, anywhere</em><br/>
+  <img src="assets/panel-screenshot.svg" alt="Momo clipboard history panel" width="600" />
+</p>
 
 ---
 
