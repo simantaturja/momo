@@ -8,7 +8,6 @@ final class AppCoordinator {
     let imagesDir: String
     private var pollTimer: DispatchSourceTimer?
     private let pollQueue = DispatchQueue(label: "momo.poll", qos: .utility)
-    private var didWarnNoAccessibility = false
 
     // MARK: Store location
 
@@ -113,35 +112,15 @@ final class AppCoordinator {
         panel.restorePreviousApp()
     }
 
+    /// Choosing an item copies it to the clipboard and closes the panel — it does
+    /// NOT synthesize a paste. The user pastes manually with ⌘V in the target app.
     func paste(_ item: ClipboardItem) {
         let wrote = Paster.writeToPasteboard(item, imagesDir: imagesDir)
         panel.hide()
         panel.restorePreviousApp()
-        guard wrote else {
-            NSLog("Momo: nothing to paste for item \(item.id) (missing blob or empty payload)")
-            return
+        if !wrote {
+            NSLog("Momo: nothing to copy for item \(item.id) (missing blob or empty payload)")
         }
-        guard Paster.isAccessibilityTrusted else {
-            warnAccessibilityOnce()   // item is on the clipboard; can't synthesize the keystroke
-            return
-        }
-        // Give focus a beat to return, then synth Cmd+V.
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(80)) {
-            Paster.synthesizePaste()
-        }
-    }
-
-    private func warnAccessibilityOnce() {
-        Paster.promptForAccessibilityIfNeeded()
-        guard !didWarnNoAccessibility else { return }
-        didWarnNoAccessibility = true
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "Momo needs Accessibility permission to paste automatically"
-        alert.informativeText = "Your item is already on the clipboard — press ⌘V to paste it now.\n\nTo enable automatic paste, allow Momo under System Settings ▸ Privacy & Security ▸ Accessibility."
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
     }
 
     func startPolling() {
