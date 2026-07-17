@@ -30,7 +30,7 @@ public struct ClipboardItem: Identifiable, Equatable, Sendable {
     }
 
     /// True if this item passes the given kind/extension filter. `kind == nil` matches
-    /// anything; `fileExtension` only constrains `.file`-kind items and is ignored otherwise.
+    /// anything. A non-nil `fileExtension` never matches an item whose kind isn't `.file`.
     public func matches(kind: ItemKind?, fileExtension: String?) -> Bool {
         guard let kind else { return true }
         guard self.kind == kind else { return false }
