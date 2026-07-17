@@ -29,6 +29,19 @@ public struct ClipboardItem: Identifiable, Equatable, Sendable {
         self.contentHash = contentHash
     }
 
+    /// True if this item passes the given kind/extension filter. `kind == nil` matches
+    /// anything; `fileExtension` only constrains `.file`-kind items and is ignored otherwise.
+    public func matches(kind: ItemKind?, fileExtension: String?) -> Bool {
+        guard let kind else { return true }
+        guard self.kind == kind else { return false }
+        guard kind == .file else {
+            // If a file extension is specified but this item is not a file, reject it
+            return fileExtension == nil
+        }
+        guard let fileExtension else { return true }
+        return filePaths.contains { (($0 as NSString).pathExtension).caseInsensitiveCompare(fileExtension) == .orderedSame }
+    }
+
     /// Deterministic hash of the payload, used as the dedupe key.
     /// For images, pass `imageHash` (a digest of the image bytes, via `imageHash(_:)`) —
     /// never the storage path, which is a fresh UUID on every capture and would defeat dedupe.
