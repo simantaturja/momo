@@ -27,6 +27,7 @@ rm -rf "$APP" "$ZIP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BUILD_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 cp "$PLIST" "$APP/Contents/Info.plist"
+cp "assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 echo "==> Ad-hoc signing"
 codesign --force --deep --sign - "$APP"
