@@ -6,9 +6,10 @@ private final class FakePasteboard: PasteboardReading {
     var types: Set<String> = ["public.utf8-plain-text"]
     var stringValue: String?
     var imageBytes: Data?
+    var fileURLValues: [String] = []
     func string() -> String? { stringValue }
     func imageData() -> Data? { imageBytes }
-    func fileURLs() -> [String] { [] }
+    func fileURLs() -> [String] { fileURLValues }
 }
 
 final class ClipboardMonitorTests: XCTestCase {
@@ -76,5 +77,20 @@ final class ClipboardMonitorTests: XCTestCase {
         XCTAssertEqual(hashes.count, 2)
         XCTAssertNotEqual(hashes[0], hashes[1],
                           "different image content must hash differently even when the blob filename is reused")
+    }
+
+    func testFileWithImagePreviewCapturedAsFileNotImage() {
+        // Finder puts a bitmap preview rep on the pasteboard alongside the file URL for some
+        // file types (e.g. PDFs with a QuickLook thumbnail). File identity must win.
+        let pb = FakePasteboard()
+        pb.changeCount = 1
+        pb.fileURLValues = ["/tmp/doc.pdf"]
+        pb.imageBytes = Data([0x1, 0x2, 0x3])
+        let monitor = ClipboardMonitor(pasteboard: pb, writeImageBlob: { _ in "blob.png" })
+        var captured: ClipboardItem?
+        monitor.onNewItem = { captured = $0 }
+        monitor.poll(now: Date())
+        XCTAssertEqual(captured?.kind, .file)
+        XCTAssertEqual(captured?.filePaths, ["/tmp/doc.pdf"])
     }
 }
