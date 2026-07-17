@@ -64,6 +64,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         let ms = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
         NSLog("Momo open render: \(ms) ms")
         NSApp.activate(ignoringOtherApps: true)
+        (content as? HistoryView)?.resetFilter()
         (content as? HistoryView)?.focusSearch()
     }
 

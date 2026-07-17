@@ -52,6 +52,9 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     private let emptySubtitle = NSTextField(labelWithString: "")
     private let emptyStack = NSStackView()
     private var results: [ClipboardItem] = []
+    private var selectedKind: ItemKind?
+    private var selectedFileExtension: String?
+    private let filterButton = NSButton()
 
     init(index: HistoryIndex, imagesDir: String,
          onChoose: @escaping (ClipboardItem) -> Void,
@@ -84,15 +87,28 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         magnifier.contentTintColor = Theme.badgeSymbol
         magnifier.translatesAutoresizingMaskIntoConstraints = false
 
+        filterButton.translatesAutoresizingMaskIntoConstraints = false
+        filterButton.bezelStyle = .regularSquare
+        filterButton.isBordered = false
+        filterButton.imagePosition = .imageOnly
+        filterButton.image = NSImage(systemSymbolName: "line.3.horizontal.decrease.circle", accessibilityDescription: nil)
+        filterButton.contentTintColor = Theme.badgeSymbol
+        filterButton.target = self
+        filterButton.action = #selector(showFilterMenu)
+
         capsule.translatesAutoresizingMaskIntoConstraints = false
-        capsule.addSubview(magnifier); capsule.addSubview(searchField)
+        capsule.addSubview(magnifier); capsule.addSubview(searchField); capsule.addSubview(filterButton)
         NSLayoutConstraint.activate([
             magnifier.leadingAnchor.constraint(equalTo: capsule.leadingAnchor, constant: 14),
             magnifier.centerYAnchor.constraint(equalTo: capsule.centerYAnchor),
             magnifier.widthAnchor.constraint(equalToConstant: 16),
             magnifier.heightAnchor.constraint(equalToConstant: 16),
+            filterButton.trailingAnchor.constraint(equalTo: capsule.trailingAnchor, constant: -10),
+            filterButton.centerYAnchor.constraint(equalTo: capsule.centerYAnchor),
+            filterButton.widthAnchor.constraint(equalToConstant: 18),
+            filterButton.heightAnchor.constraint(equalToConstant: 18),
             searchField.leadingAnchor.constraint(equalTo: magnifier.trailingAnchor, constant: 8),
-            searchField.trailingAnchor.constraint(equalTo: capsule.trailingAnchor, constant: -10),
+            searchField.trailingAnchor.constraint(equalTo: filterButton.leadingAnchor, constant: -6),
             searchField.centerYAnchor.constraint(equalTo: capsule.centerYAnchor),
         ])
 
@@ -184,6 +200,85 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
 
     func focusSearch() { window?.makeFirstResponder(searchField) }
 
+    @objc private func showFilterMenu(_ sender: NSButton) {
+        let menu = NSMenu()
+
+        let all = NSMenuItem(title: "All", action: #selector(selectFilterAll), keyEquivalent: "")
+        all.target = self
+        all.state = selectedKind == nil ? .on : .off
+        menu.addItem(all)
+
+        let text = NSMenuItem(title: "Text", action: #selector(selectFilterText), keyEquivalent: "")
+        text.target = self
+        text.state = (selectedKind == .text) ? .on : .off
+        menu.addItem(text)
+
+        let image = NSMenuItem(title: "Image", action: #selector(selectFilterImage), keyEquivalent: "")
+        image.target = self
+        image.state = (selectedKind == .image) ? .on : .off
+        menu.addItem(image)
+
+        let fileItem = NSMenuItem(title: "File", action: nil, keyEquivalent: "")
+        let extensions = index.distinctFileExtensions()
+        if extensions.isEmpty {
+            fileItem.action = #selector(selectFilterAnyFile)
+            fileItem.target = self
+            fileItem.state = (selectedKind == .file) ? .on : .off
+        } else {
+            let submenu = NSMenu()
+            let anyFile = NSMenuItem(title: "All Files", action: #selector(selectFilterAnyFile), keyEquivalent: "")
+            anyFile.target = self
+            anyFile.state = (selectedKind == .file && selectedFileExtension == nil) ? .on : .off
+            submenu.addItem(anyFile)
+            submenu.addItem(.separator())
+            for ext in extensions {
+                let extItem = NSMenuItem(title: ".\(ext)", action: #selector(selectFilterFileExtension(_:)), keyEquivalent: "")
+                extItem.target = self
+                extItem.representedObject = ext
+                extItem.state = (selectedKind == .file && selectedFileExtension == ext) ? .on : .off
+                submenu.addItem(extItem)
+            }
+            fileItem.submenu = submenu
+        }
+        menu.addItem(fileItem)
+
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+    }
+
+    @objc private func selectFilterAll() { applyFilter(kind: nil, fileExtension: nil) }
+    @objc private func selectFilterText() { applyFilter(kind: .text, fileExtension: nil) }
+    @objc private func selectFilterImage() { applyFilter(kind: .image, fileExtension: nil) }
+    @objc private func selectFilterAnyFile() { applyFilter(kind: .file, fileExtension: nil) }
+
+    @objc private func selectFilterFileExtension(_ sender: NSMenuItem) {
+        guard let ext = sender.representedObject as? String else { return }
+        applyFilter(kind: .file, fileExtension: ext)
+    }
+
+    private func applyFilter(kind: ItemKind?, fileExtension: String?) {
+        selectedKind = kind
+        selectedFileExtension = fileExtension
+        updateFilterButtonAppearance()
+        reload()
+    }
+
+    private func updateFilterButtonAppearance() {
+        let active = selectedKind != nil
+        let symbolName = active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle"
+        filterButton.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+        filterButton.contentTintColor = active ? Theme.accent : Theme.badgeSymbol
+    }
+
+    /// Clears the type filter. Called by `PanelController.show()` so the filter never
+    /// survives a close/reopen (text search intentionally does persist — unrelated behavior).
+    func resetFilter() {
+        guard selectedKind != nil || selectedFileExtension != nil else { return }
+        selectedKind = nil
+        selectedFileExtension = nil
+        updateFilterButtonAppearance()
+        reload()
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.contains(.command) {
             if event.charactersIgnoringModifiers == "p", let item = selectedItem() {
@@ -208,7 +303,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     func reload(preserveSelection: Bool = false) {
         let start = DispatchTime.now()
         let keep = preserveSelection ? selectedItem()?.id : nil
-        results = index.search(searchField.stringValue)
+        results = index.search(searchField.stringValue, kind: selectedKind, fileExtension: selectedFileExtension)
         tableView.reloadData()
         if let keep, let idx = results.firstIndex(where: { $0.id == keep }) {
             tableView.selectRowIndexes([idx], byExtendingSelection: false)
