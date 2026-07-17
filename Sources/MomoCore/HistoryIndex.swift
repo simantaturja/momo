@@ -20,9 +20,10 @@ public final class HistoryIndex {
         items.insert(item, at: 0)
     }
 
-    public func search(_ query: String) -> [ClipboardItem] {
-        guard !query.isEmpty else { return items }
-        let scored: [(item: ClipboardItem, score: Int)] = items.compactMap { item in
+    public func search(_ query: String, kind: ItemKind? = nil, fileExtension: String? = nil) -> [ClipboardItem] {
+        let candidates = items.filter { $0.matches(kind: kind, fileExtension: fileExtension) }
+        guard !query.isEmpty else { return candidates }
+        let scored: [(item: ClipboardItem, score: Int)] = candidates.compactMap { item in
             guard let s = fuzzyScore(query: query, candidate: item.preview) else { return nil }
             return (item, s)
         }
@@ -31,5 +32,14 @@ public final class HistoryIndex {
             if a.score != b.score { return a.score > b.score }
             return a.item.createdAt > b.item.createdAt
         }.map(\.item)
+    }
+
+    public func distinctFileExtensions() -> [String] {
+        let extensions = items
+            .filter { $0.kind == .file }
+            .flatMap { $0.filePaths }
+            .map { ($0 as NSString).pathExtension.lowercased() }
+            .filter { !$0.isEmpty }
+        return Array(Set(extensions)).sorted()
     }
 }
