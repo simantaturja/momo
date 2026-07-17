@@ -2,8 +2,8 @@
 # On release, this file is synced to the tap repo (simantaturja/homebrew-momo) at Casks/momo.rb.
 # Set `sha256` per release to the sha of the exact zip attached to the GitHub release.
 cask "momo" do
-  version "0.3.2"
-  sha256 "52ba6e5fe57739eac549bebd2c05fbc14f0d47a0a30ca14fd4b9fc91c0ebc074"
+  version "0.3.3"
+  sha256 "d5d87dc3ac97900c04833d49fb56306e48db0705e67937919301a1263693fc39"
 
   url "https://github.com/simantaturja/momo/releases/download/v#{version}/Momo-#{version}.zip"
   name "Momo"
