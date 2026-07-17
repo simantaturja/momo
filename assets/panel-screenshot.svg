@@ -26,11 +26,11 @@
     <circle cx="52" cy="50" r="5.5" fill="none" stroke="#8a8a90" stroke-width="1.6"/>
     <line x1="56.3" y1="54.3" x2="60" y2="58" stroke="#8a8a90" stroke-width="1.6" stroke-linecap="round"/>
 
-    <!-- row 1: pinned link, selected-neutral -->
+    <!-- row 1: pinned text, selected-neutral -->
     <g>
       <rect x="32" y="80" width="26" height="26" rx="6" fill="#4a4a50"/>
       <circle cx="55" cy="83" r="3.5" fill="#E8542B"/>
-      <text class="ui" x="45" y="98" font-size="11" fill="#c9c9cf" text-anchor="middle">🔗</text>
+      <text class="ui" x="45" y="98" font-size="11" fill="#c9c9cf" text-anchor="middle">📄</text>
       <text class="ui" x="72" y="97" font-size="13" fill="#e8e8ea">github.com/simantaturja/momo</text>
       <text class="ui" x="596" y="97" font-size="11" fill="#8a8a90" text-anchor="end">2m</text>
     </g>
