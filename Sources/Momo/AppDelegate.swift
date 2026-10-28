@@ -64,7 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func statusItemClicked() {
         let event = NSApp.currentEvent
         if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
-            coordinator.panel.hide()
+            if coordinator.panel.panel.isVisible { coordinator.dismiss() }
             statusItem.menu = menu
             statusItem.button?.performClick(nil)
             statusItem.menu = nil

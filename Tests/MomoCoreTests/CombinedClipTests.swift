@@ -19,8 +19,8 @@ final class CombinedClipTests: XCTestCase {
     }
 
     func testJoinsTextItemsWithNewlinesInGivenOrder() {
-        let clip = CombinedClip([text("a"), text("b"), text("c")])
-        XCTAssertEqual(clip.text, "a\nb\nc")
+        let clip = CombinedClip([text("c"), text("a"), text("b")])
+        XCTAssertEqual(clip.text, "c\na\nb")
         XCTAssertEqual(clip.filePaths, [])
         XCTAssertEqual(clip.imagePaths, [])
     }
@@ -30,21 +30,23 @@ final class CombinedClipTests: XCTestCase {
     }
 
     func testFilePathsAreMergedInOrderWithoutDuplicates() {
-        let clip = CombinedClip([file(["/a", "/b"]), file(["/b", "/c"])])
-        XCTAssertEqual(clip.filePaths, ["/a", "/b", "/c"])
+        let clip = CombinedClip([file(["/z", "/b"]), file(["/b", "/a"])])
+        XCTAssertEqual(clip.filePaths, ["/z", "/b", "/a"])
         XCTAssertNil(clip.text)
     }
 
     func testMixedKindsKeepEveryPayload() {
-        let clip = CombinedClip([text("x"), image("1.png"), file(["/f"]), image("2.png"), text("y")])
-        XCTAssertEqual(clip.text, "x\ny")
+        let clip = CombinedClip([text("y"), image("2.png"), file(["/f"]), image("1.png"), text("x")])
+        XCTAssertEqual(clip.text, "y\nx")
         XCTAssertEqual(clip.filePaths, ["/f"])
-        XCTAssertEqual(clip.imagePaths, ["1.png", "2.png"])
-        XCTAssertFalse(clip.isEmpty)
+        XCTAssertEqual(clip.imagePaths, ["2.png", "1.png"])
     }
 
     func testItemsWithoutPayloadProduceEmptyClip() {
-        XCTAssertTrue(CombinedClip([text(nil), image(nil), file([])]).isEmpty)
-        XCTAssertTrue(CombinedClip([]).isEmpty)
+        for clip in [CombinedClip([text(nil), image(nil), file([])]), CombinedClip([])] {
+            XCTAssertNil(clip.text)
+            XCTAssertEqual(clip.filePaths, [])
+            XCTAssertEqual(clip.imagePaths, [])
+        }
     }
 }

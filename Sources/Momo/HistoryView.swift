@@ -40,8 +40,8 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     private let index: HistoryIndex
     private let imagesDir: String
     private let onChoose: ([ClipboardItem]) -> Void
-    private let onPinToggle: (ClipboardItem) -> Void
-    private let onDelete: (ClipboardItem) -> Void
+    private let onPinToggle: ([ClipboardItem]) -> Void
+    private let onDelete: ([ClipboardItem]) -> Void
     private let onCancel: () -> Void
 
     private let searchField = FocusRingSearchField()
@@ -62,8 +62,8 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
 
     init(index: HistoryIndex, imagesDir: String,
          onChoose: @escaping ([ClipboardItem]) -> Void,
-         onPinToggle: @escaping (ClipboardItem) -> Void,
-         onDelete: @escaping (ClipboardItem) -> Void,
+         onPinToggle: @escaping ([ClipboardItem]) -> Void,
+         onDelete: @escaping ([ClipboardItem]) -> Void,
          onCancel: @escaping () -> Void) {
         self.index = index; self.imagesDir = imagesDir
         self.onChoose = onChoose; self.onPinToggle = onPinToggle
@@ -292,14 +292,23 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         reload()
     }
 
+    /// A multi-selection never survives a close/reopen (a multi-copy re-captures as a new
+    /// top item, so the old rows would otherwise stay selected). Called by `PanelController.show()`.
+    func collapseSelection() {
+        guard tableView.selectedRowIndexes.count > 1, !results.isEmpty else { return }
+        tableView.selectRowIndexes([0], byExtendingSelection: false)
+        tableView.scrollRowToVisible(0)
+        anchorRow = 0; cursorRow = 0
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.contains(.command) {
             let items = selectedItems()
             if event.charactersIgnoringModifiers == "p", !items.isEmpty {
-                items.forEach(onPinToggle); return true
+                onPinToggle(items); return true
             }
             if event.keyCode == 51, !items.isEmpty {   // ⌘⌫ deletes the selected items
-                items.forEach(onDelete); return true
+                onDelete(items); return true
             }
         }
         return super.performKeyEquivalent(with: event)

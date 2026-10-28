@@ -24,8 +24,12 @@ enum Paster {
         var objects: [NSPasteboardWriting] = []
         if let t = clip.text { objects.append(t as NSString) }
         objects += clip.filePaths.map { URL(fileURLWithPath: $0) as NSURL }
-        objects += clip.imagePaths.compactMap {
-            NSImage(contentsOfFile: (imagesDir as NSString).appendingPathComponent($0))
+        for rel in clip.imagePaths {
+            if let img = NSImage(contentsOfFile: (imagesDir as NSString).appendingPathComponent(rel)) {
+                objects.append(img)
+            } else {
+                NSLog("Momo: skipping missing image blob \(rel)")
+            }
         }
         guard !objects.isEmpty else { return false }
         let pb = NSPasteboard.general

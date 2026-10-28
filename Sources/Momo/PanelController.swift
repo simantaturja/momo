@@ -9,7 +9,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     var anchorFrame: (() -> NSRect?)?
     /// Called with `true` on show and `false` on hide, e.g. to highlight the menu-bar icon.
     var onVisibilityChange: ((Bool) -> Void)?
-    private var lastHide = Date.distantPast
+    private var lastResignHide = Date.distantPast
 
     init(contentView: NSView) {
         content = contentView
@@ -55,15 +55,16 @@ final class PanelController: NSObject, NSWindowDelegate {
         // flutter during show() does not dismiss the freshly-opened panel.
         DispatchQueue.main.async { [weak self] in
             guard let self, self.panel.isVisible, !self.panel.isKeyWindow else { return }
+            self.lastResignHide = Date()
             self.onResignKey?()
         }
     }
 
     func toggle() {
-        if panel.isVisible { hide() }
+        if panel.isVisible { hide(); restorePreviousApp() }
         // A click on the menu-bar icon can first dismiss the open panel via resign-key;
         // that same click must close it, not immediately reopen it.
-        else if Date().timeIntervalSince(lastHide) > 0.25 { show() }
+        else if Date().timeIntervalSince(lastResignHide) > 0.25 { show() }
     }
 
     func show() {
@@ -75,6 +76,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         NSLog("Momo open render: \(ms) ms")
         NSApp.activate(ignoringOtherApps: true)
         (content as? HistoryView)?.resetFilter()
+        (content as? HistoryView)?.collapseSelection()
         (content as? HistoryView)?.focusSearch()
         onVisibilityChange?(true)
     }
@@ -82,7 +84,6 @@ final class PanelController: NSObject, NSWindowDelegate {
     func hide() {
         guard panel.isVisible else { return }
         panel.orderOut(nil)
-        lastHide = Date()
         onVisibilityChange?(false)
     }
 
@@ -90,7 +91,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// aligned with the icon, clamped so the panel stays fully on that screen.
     private func position() {
         guard let icon = anchorFrame?(),
-              let screen = NSScreen.screens.first(where: { $0.frame.intersects(icon) }) else {
+              let screen = NSScreen.screens.first(where: { $0.frame.contains(NSPoint(x: icon.midX, y: icon.midY)) }) else {
             panel.center()
             return
         }

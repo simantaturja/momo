@@ -3,7 +3,7 @@ import Foundation
 /// The payload for copying one or more history items in a single go: every text item joined
 /// by newlines (in the order given), every file path (merged, duplicates dropped) and every
 /// image blob. The shell writes whatever is non-empty to the pasteboard.
-public struct CombinedClip: Equatable {
+public struct CombinedClip {
     public let text: String?
     public let filePaths: [String]
     public let imagePaths: [String]
@@ -26,6 +26,4 @@ public struct CombinedClip: Equatable {
         filePaths = files
         imagePaths = images
     }
-
-    public var isEmpty: Bool { text == nil && filePaths.isEmpty && imagePaths.isEmpty }
 }

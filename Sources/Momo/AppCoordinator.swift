@@ -31,17 +31,18 @@ final class AppCoordinator {
         index: index,
         imagesDir: imagesDir,
         onChoose: { [weak self] items in self?.paste(items) },
-        onPinToggle: { [weak self] item in
+        onPinToggle: { [weak self] items in
             guard let self else { return }
+            let pin = items.contains { !$0.pinned }   // pin all unless every one is already pinned
             self.pollQueue.async {
-                try? self.store.setPinned(id: item.id, pinned: !item.pinned)
+                for item in items { try? self.store.setPinned(id: item.id, pinned: pin) }
                 self.reloadIndexFromStore()
             }
         },
-        onDelete: { [weak self] item in
+        onDelete: { [weak self] items in
             guard let self else { return }
             self.pollQueue.async {
-                try? self.store.delete(id: item.id)
+                for item in items { try? self.store.delete(id: item.id) }
                 self.reloadIndexFromStore()
             }
         },
