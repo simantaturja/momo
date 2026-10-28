@@ -5,16 +5,21 @@ final class PanelController: NSObject, NSWindowDelegate {
     private let content: NSView
     private(set) var previousApp: NSRunningApplication?
     var onResignKey: (() -> Void)?
+    /// Screen frame of the menu-bar icon; the panel drops down beneath it (centered if nil).
+    var anchorFrame: (() -> NSRect?)?
+    /// Called with `true` on show and `false` on hide, e.g. to highlight the menu-bar icon.
+    var onVisibilityChange: ((Bool) -> Void)?
+    private var lastHide = Date.distantPast
 
     init(contentView: NSView) {
         content = contentView
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 600, height: 420),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 460),
             styleMask: [.nonactivatingPanel, .titled, .fullSizeContentView],
             backing: .buffered, defer: false)
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
-        panel.isMovableByWindowBackground = true
+        panel.isMovable = false                 // a dropdown stays pinned under its icon
         panel.level = .floating
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false      // never torn down -> pre-warmed
@@ -54,11 +59,16 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    func toggle() { panel.isVisible ? hide() : show() }
+    func toggle() {
+        if panel.isVisible { hide() }
+        // A click on the menu-bar icon can first dismiss the open panel via resign-key;
+        // that same click must close it, not immediately reopen it.
+        else if Date().timeIntervalSince(lastHide) > 0.25 { show() }
+    }
 
     func show() {
         previousApp = NSWorkspace.shared.frontmostApplication
-        panel.center()
+        position()
         let start = DispatchTime.now()
         panel.makeKeyAndOrderFront(nil)
         let ms = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
@@ -66,10 +76,28 @@ final class PanelController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         (content as? HistoryView)?.resetFilter()
         (content as? HistoryView)?.focusSearch()
+        onVisibilityChange?(true)
     }
 
     func hide() {
+        guard panel.isVisible else { return }
         panel.orderOut(nil)
+        lastHide = Date()
+        onVisibilityChange?(false)
+    }
+
+    /// Drop down from the menu-bar icon like a menu: top edge just under the bar, left edge
+    /// aligned with the icon, clamped so the panel stays fully on that screen.
+    private func position() {
+        guard let icon = anchorFrame?(),
+              let screen = NSScreen.screens.first(where: { $0.frame.intersects(icon) }) else {
+            panel.center()
+            return
+        }
+        let visible = screen.visibleFrame
+        let width = panel.frame.width
+        let x = min(max(icon.minX, visible.minX + 8), visible.maxX - width - 8)
+        panel.setFrameTopLeftPoint(NSPoint(x: x, y: min(icon.minY, visible.maxY) - 4))
     }
 
     func restorePreviousApp() {

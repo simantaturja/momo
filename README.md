@@ -39,7 +39,8 @@ and filters faster than you can think.
 
 ## Features
 
-- ⚡ **Instant popup** — the panel is built once at launch and simply revealed, never
+- ⚡ **Instant dropdown** — click the menu-bar icon (or press ⌘⇧V) and the history drops
+  down right under it. The panel is built once at launch and simply revealed, never
   rebuilt. Opening is a reveal, not an assembly.
 - 🔎 **Instant fuzzy search** — filtering runs over an in-memory index; a keystroke never
   touches the disk. Subsequence matching ranks contiguous, early, and pinned matches first.
@@ -49,6 +50,8 @@ and filters faster than you can think.
   as lazily-decoded, cached thumbnails; files keep their paths and paste as real file URLs.
 - 🔒 **Privacy first** — anything a source app marks *concealed* or *transient*
   (1Password, other password managers) is never stored. Nothing ever leaves your machine.
+- 🧺 **Copy many at once** — ⇧↑/⇧↓ or ⌘/⇧-click to select several items, then ↵ copies
+  them together: text joined line by line (top to bottom), files as one multi-file copy.
 - 📌 **Pin** what you reuse, **delete** (⌘⌫) what you don't, **Clear History** when you want a clean slate.
 - 🪄 **Copy and get out of the way** — pick an item and Momo copies it, closes, and restores
   your previous app; press ⌘V there to paste.
@@ -81,7 +84,8 @@ swift run Momo               # build and launch
 ```
 
 Momo has **no Dock icon** — it runs as a menu-bar accessory. Look for the 🥟 in your menu
-bar. From there: **Show Momo**, **Launch at Login**, and **Clear History…**.
+bar: **click** it to drop down your history; **right-click** it for **Launch at Login**,
+**Clear History…**, and **Quit**.
 
 Momo needs no special permissions: choosing an item copies it to the clipboard and you paste
 with ⌘V yourself. (No Accessibility grant, no synthesized keystrokes.)
@@ -90,16 +94,17 @@ with ⌘V yourself. (No Accessibility grant, no synthesized keystrokes.)
 
 | Where | Key | Action |
 |-------|-----|--------|
-| Anywhere | **⌘⇧V** | Open / close the history panel |
+| Anywhere | **⌘⇧V** or click 🥟 | Open / close the history dropdown |
 | Panel | *type* | Fuzzy-filter the history |
 | Panel | **↑ / ↓** | Move selection |
-| Panel | **↵** | Copy the selected item & close — then ⌘V in your app to paste |
-| Panel | **⌘P** | Pin / unpin the selected item |
-| Panel | **⌘⌫** | Delete the selected item |
+| Panel | **⇧↑ / ⇧↓**, **⌘-click**, **⇧-click** | Select multiple items |
+| Panel | **↵** | Copy the selected item(s) & close — then ⌘V in your app to paste |
+| Panel | **⌘P** | Pin / unpin the selected item(s) |
+| Panel | **⌘⌫** | Delete the selected item(s) |
 | Panel | **Esc** | Dismiss (returns focus to your previous app) |
 
-> If another app already owns ⌘⇧V, Momo tells you and you can always open it via **Show
-> Momo** in the menu-bar icon.
+> If another app already owns ⌘⇧V, Momo tells you and you can always open it by clicking
+> the menu-bar icon.
 
 ## How it's fast — the design
 

@@ -30,7 +30,7 @@ final class AppCoordinator {
     lazy var historyView = HistoryView(
         index: index,
         imagesDir: imagesDir,
-        onChoose: { [weak self] item in self?.paste(item) },
+        onChoose: { [weak self] items in self?.paste(items) },
         onPinToggle: { [weak self] item in
             guard let self else { return }
             self.pollQueue.async {
@@ -112,14 +112,14 @@ final class AppCoordinator {
         panel.restorePreviousApp()
     }
 
-    /// Choosing an item copies it to the clipboard and closes the panel — it does
-    /// NOT synthesize a paste. The user pastes manually with ⌘V in the target app.
-    func paste(_ item: ClipboardItem) {
-        let wrote = Paster.writeToPasteboard(item, imagesDir: imagesDir)
+    /// Choosing items copies them (together, if several are selected) to the clipboard and
+    /// closes the panel — it does NOT synthesize a paste. The user pastes manually with ⌘V.
+    func paste(_ items: [ClipboardItem]) {
+        let wrote = Paster.writeToPasteboard(items, imagesDir: imagesDir)
         panel.hide()
         panel.restorePreviousApp()
         if !wrote {
-            NSLog("Momo: nothing to copy for item \(item.id) (missing blob or empty payload)")
+            NSLog("Momo: nothing to copy for \(items.count) item(s) (missing blob or empty payload)")
         }
     }
 

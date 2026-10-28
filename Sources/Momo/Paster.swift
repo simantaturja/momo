@@ -15,26 +15,22 @@ enum Paster {
         _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
 
-    /// Writes the item to the general pasteboard. Returns whether any content was
-    /// actually written, so the caller can skip synthesizing a paste of nothing.
+    /// Writes the items to the general pasteboard as one copy (see `CombinedClip`): joined
+    /// text first, so a text paste gets every snippet, then file URLs, then images. Returns
+    /// whether any content was actually written.
     @discardableResult
-    static func writeToPasteboard(_ item: ClipboardItem, imagesDir: String) -> Bool {
+    static func writeToPasteboard(_ items: [ClipboardItem], imagesDir: String) -> Bool {
+        let clip = CombinedClip(items)
+        var objects: [NSPasteboardWriting] = []
+        if let t = clip.text { objects.append(t as NSString) }
+        objects += clip.filePaths.map { URL(fileURLWithPath: $0) as NSURL }
+        objects += clip.imagePaths.compactMap {
+            NSImage(contentsOfFile: (imagesDir as NSString).appendingPathComponent($0))
+        }
+        guard !objects.isEmpty else { return false }
         let pb = NSPasteboard.general
         pb.clearContents()
-        switch item.kind {
-        case .text, .richText:
-            guard let t = item.text else { return false }
-            return pb.setString(t, forType: .string)
-        case .image:
-            guard let rel = item.imagePath,
-                  let img = NSImage(contentsOfFile: (imagesDir as NSString).appendingPathComponent(rel)),
-                  let tiff = img.tiffRepresentation else { return false }
-            return pb.setData(tiff, forType: .tiff)
-        case .file:
-            let urls = item.filePaths.map { URL(fileURLWithPath: $0) as NSURL }
-            guard !urls.isEmpty else { return false }
-            return pb.writeObjects(urls)
-        }
+        return pb.writeObjects(objects)
     }
 
     /// Synthesize Cmd+V into the frontmost app.

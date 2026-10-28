@@ -3,6 +3,7 @@ import MomoCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
+    private let menu = NSMenu()
     var coordinator: AppCoordinator!
     private var hotkey: HotkeyManager!
 
@@ -20,16 +21,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = Self.momoIcon()
-        let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Show Momo", action: #selector(showPanel), keyEquivalent: ""))
-        menu.addItem(.separator())
+        statusItem.button?.target = self
+        statusItem.button?.action = #selector(statusItemClicked)
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        coordinator.panel.anchorFrame = { [weak self] in self?.statusItem.button?.window?.frame }
+        coordinator.panel.onVisibilityChange = { [weak self] visible in
+            self?.statusItem.button?.highlight(visible)
+        }
+
         let login = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
         login.state = Settings.launchAtLogin ? .on : .off
         menu.addItem(login)
         menu.addItem(NSMenuItem(title: "Clear History…", action: #selector(clearHistory), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Momo", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        statusItem.menu = menu
     }
 
     /// Opens the store, recovering from a corrupt/unreadable database by quarantining it
@@ -54,7 +59,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func showPanel() { coordinator.panel.show() }
+    /// Left-click drops the history panel down from the icon; right-click (or ⌃-click)
+    /// shows the app menu. The menu is attached only for that click so left-click stays ours.
+    @objc private func statusItemClicked() {
+        let event = NSApp.currentEvent
+        if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
+            coordinator.panel.hide()
+            statusItem.menu = menu
+            statusItem.button?.performClick(nil)
+            statusItem.menu = nil
+        } else {
+            coordinator.panel.toggle()
+        }
+    }
 
     @objc private func clearHistory() {
         let alert = NSAlert()
@@ -69,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func warnHotkeyRegistrationFailed() {
         let alert = NSAlert()
         alert.messageText = "Momo couldn't register its ⌘⇧V shortcut"
-        alert.informativeText = "Another app may already use ⌘⇧V. You can still open Momo any time from the menu bar icon (\"Show Momo\")."
+        alert.informativeText = "Another app may already use ⌘⇧V. You can still open Momo any time by clicking its menu bar icon."
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")
         alert.runModal()

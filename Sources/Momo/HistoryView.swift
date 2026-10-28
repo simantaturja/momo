@@ -39,7 +39,7 @@ private extension NSBezierPath {
 final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
     private let index: HistoryIndex
     private let imagesDir: String
-    private let onChoose: (ClipboardItem) -> Void
+    private let onChoose: ([ClipboardItem]) -> Void
     private let onPinToggle: (ClipboardItem) -> Void
     private let onDelete: (ClipboardItem) -> Void
     private let onCancel: () -> Void
@@ -55,9 +55,13 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     private var selectedKind: ItemKind?
     private var selectedFileExtension: String?
     private let filterButton = NSButton()
+    private let selectionCount = NSTextField(labelWithString: "")
+    // Keyboard range selection: ⇧↑/⇧↓ moves `cursorRow` and selects everything back to `anchorRow`.
+    private var anchorRow = 0
+    private var cursorRow = 0
 
     init(index: HistoryIndex, imagesDir: String,
-         onChoose: @escaping (ClipboardItem) -> Void,
+         onChoose: @escaping ([ClipboardItem]) -> Void,
          onPinToggle: @escaping (ClipboardItem) -> Void,
          onDelete: @escaping (ClipboardItem) -> Void,
          onCancel: @escaping () -> Void) {
@@ -119,6 +123,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         tableView.rowHeight = 44
         tableView.style = .plain
         tableView.backgroundColor = .clear
+        tableView.allowsMultipleSelection = true
         tableView.dataSource = self
         tableView.delegate = self
         tableView.target = self
@@ -183,17 +188,25 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         let separator = NSBox()
         separator.boxType = .separator
         separator.translatesAutoresizingMaskIntoConstraints = false
-        let hint = NSTextField(labelWithString: "↑↓ move · ↵ copy · ⌘P pin · ⌘⌫ delete")
+        let hint = NSTextField(labelWithString: "↵ copy · ⇧↑↓ select more · ⌘P pin · ⌘⌫ delete")
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = Theme.dimText
+        hint.lineBreakMode = .byTruncatingTail
+        hint.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         hint.translatesAutoresizingMaskIntoConstraints = false
-        footer.addSubview(separator); footer.addSubview(hint)
+        selectionCount.font = .systemFont(ofSize: 11, weight: .medium)
+        selectionCount.textColor = Theme.accent
+        selectionCount.translatesAutoresizingMaskIntoConstraints = false
+        footer.addSubview(separator); footer.addSubview(hint); footer.addSubview(selectionCount)
         NSLayoutConstraint.activate([
             separator.topAnchor.constraint(equalTo: footer.topAnchor),
             separator.leadingAnchor.constraint(equalTo: footer.leadingAnchor),
             separator.trailingAnchor.constraint(equalTo: footer.trailingAnchor),
             hint.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 12),
             hint.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
+            selectionCount.leadingAnchor.constraint(greaterThanOrEqualTo: hint.trailingAnchor, constant: 8),
+            selectionCount.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -12),
+            selectionCount.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
         ])
         return footer
     }
@@ -281,34 +294,38 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.contains(.command) {
-            if event.charactersIgnoringModifiers == "p", let item = selectedItem() {
-                onPinToggle(item); return true
+            let items = selectedItems()
+            if event.charactersIgnoringModifiers == "p", !items.isEmpty {
+                items.forEach(onPinToggle); return true
             }
-            if event.keyCode == 51, let item = selectedItem() {   // ⌘⌫ deletes the selected item
-                onDelete(item); return true
+            if event.keyCode == 51, !items.isEmpty {   // ⌘⌫ deletes the selected items
+                items.forEach(onDelete); return true
             }
         }
         return super.performKeyEquivalent(with: event)
     }
 
-    private func selectedItem() -> ClipboardItem? {
-        let row = tableView.selectedRow
-        return (row >= 0 && row < results.count) ? results[row] : nil
+    /// Selected items in display order (top to bottom) — also the order they're copied in.
+    private func selectedItems() -> [ClipboardItem] {
+        tableView.selectedRowIndexes.filter { $0 < results.count }.map { results[$0] }
     }
 
     /// Re-run the query and refresh the table. `preserveSelection` keeps the currently
-    /// selected item selected across data-driven refreshes (a background capture must not
+    /// selected items selected across data-driven refreshes (a background capture must not
     /// yank the user's selection back to the top); search-driven reloads pass false so the
     /// best match is highlighted.
     func reload(preserveSelection: Bool = false) {
         let start = DispatchTime.now()
-        let keep = preserveSelection ? selectedItem()?.id : nil
+        let keep = preserveSelection ? Set(selectedItems().map(\.id)) : []
         results = index.search(searchField.stringValue, kind: selectedKind, fileExtension: selectedFileExtension)
         tableView.reloadData()
-        if let keep, let idx = results.firstIndex(where: { $0.id == keep }) {
-            tableView.selectRowIndexes([idx], byExtendingSelection: false)
+        let kept = IndexSet(results.indices.filter { keep.contains(results[$0].id) })
+        if let first = kept.first, let last = kept.last {
+            tableView.selectRowIndexes(kept, byExtendingSelection: false)
+            anchorRow = first; cursorRow = last
         } else if !results.isEmpty {
             tableView.selectRowIndexes([0], byExtendingSelection: false)
+            anchorRow = 0; cursorRow = 0
         }
         updateEmptyState()
         let ms = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
@@ -340,28 +357,45 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         case #selector(NSResponder.insertNewline(_:)): chooseSelected(); return true
         case #selector(NSResponder.moveDown(_:)): moveSelection(+1); return true
         case #selector(NSResponder.moveUp(_:)): moveSelection(-1); return true
+        case #selector(NSResponder.moveDownAndModifySelection(_:)): moveSelection(+1, extending: true); return true
+        case #selector(NSResponder.moveUpAndModifySelection(_:)): moveSelection(-1, extending: true); return true
         case #selector(NSResponder.cancelOperation(_:)): onCancel(); return true
         default: return false
         }
     }
 
-    private func moveSelection(_ delta: Int) {
+    /// ↑/↓ collapse to a single row; ⇧↑/⇧↓ (`extending`) grow or shrink a range from the anchor.
+    private func moveSelection(_ delta: Int, extending: Bool = false) {
         guard !results.isEmpty else { return }
-        let next = min(max(0, tableView.selectedRow + delta), results.count - 1)
-        tableView.selectRowIndexes([next], byExtendingSelection: false)
-        tableView.scrollRowToVisible(next)
+        cursorRow = min(max(0, cursorRow + delta), results.count - 1)
+        if !extending { anchorRow = cursorRow }
+        let range = IndexSet(integersIn: min(anchorRow, cursorRow)...max(anchorRow, cursorRow))
+        tableView.selectRowIndexes(range, byExtendingSelection: false)
+        tableView.scrollRowToVisible(cursorRow)
     }
 
     @objc private func chooseSelected() {
-        guard let item = selectedItem() else { return }
-        onChoose(item)
+        let items = selectedItems()
+        guard !items.isEmpty else { return }
+        onChoose(items)
     }
 
     /// A single click selects the row but makes the table the first responder, which
     /// would strand ↵/Esc/↑↓ (they route through the search field's delegate). Hand
     /// first responder back to the search field so keys keep working; selection stays.
+    /// ⌘-click / ⇧-click multi-select natively; sync the keyboard range ends to the click.
     @objc private func rowClicked() {
+        let row = tableView.clickedRow
+        if row >= 0 {
+            cursorRow = row
+            if NSApp.currentEvent?.modifierFlags.contains(.shift) != true { anchorRow = row }
+        }
         window?.makeFirstResponder(searchField)
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        let n = tableView.selectedRowIndexes.count
+        selectionCount.stringValue = n > 1 ? "\(n) selected" : ""
     }
 
     // DataSource / Delegate
