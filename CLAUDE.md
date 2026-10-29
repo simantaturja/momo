@@ -26,7 +26,10 @@ and image decoding are background-only. Don't move work onto those two paths.
 - `swift test` — run the MomoCore suite (all logic tests live here)
 - `swift run Momo` — launch the app
 - `./scripts/package-app.sh` — build a distributable universal `Momo.app` + zip
-- Release → `RELEASING.md`, or the `release-momo` skill
+- `./scripts/install-app.sh` — build the working tree and install it into `/Applications` (`install-momo` skill)
+- `./scripts/bump-version.sh X.Y.Z` — set the version everywhere it lives
+- Release → push tag `vX.Y.Z`; CI (`.github/workflows/release.yml`) does the rest. See
+  `RELEASING.md`, or the `release-momo` skill
 
 **Gotcha:** after renaming/moving the repo directory, `rm -rf .build` first. SwiftPM bakes the
 absolute path into the module cache; a stale cache fails with

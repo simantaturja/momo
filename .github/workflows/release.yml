@@ -1,0 +1,73 @@
+# Pushing a tag vX.Y.Z (matching Info.plist) tests, packages, publishes the GitHub release,
+# and updates the Homebrew cask in both the tap repo and this repo's master.
+# Needs repo secret TAP_GITHUB_TOKEN: a fine-grained PAT with Contents read/write on
+# simantaturja/homebrew-momo.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check tag matches Info.plist version
+        run: |
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Sources/Momo/Info.plist)"
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match Info.plist version $VERSION (run scripts/bump-version.sh)"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: swift test
+
+      - name: Package
+        run: |
+          ./scripts/package-app.sh
+          echo "SHA=$(shasum -a 256 "dist/Momo-$VERSION.zip" | awk '{print $1}')" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # On a re-run the release exists: replace the asset so it matches the cask sha.
+        run: |
+          gh release create "$GITHUB_REF_NAME" "dist/Momo-$VERSION.zip" \
+            --title "Momo $VERSION" --generate-notes --verify-tag \
+          || gh release upload "$GITHUB_REF_NAME" "dist/Momo-$VERSION.zip" --clobber
+
+      - name: Update cask
+        run: |
+          sed -i '' -E \
+            -e "s/^(  version \")[^\"]+\"/\1$VERSION\"/" \
+            -e "s/^(  sha256 \")[^\"]+\"/\1$SHA\"/" \
+            packaging/homebrew/momo.rb
+          grep -q "sha256 \"$SHA\"" packaging/homebrew/momo.rb || { echo "::error::cask sha256 not updated"; exit 1; }
+          cp packaging/homebrew/momo.rb "$RUNNER_TEMP/momo.rb"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Push cask to tap
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          git clone "https://x-access-token:$TAP_TOKEN@github.com/simantaturja/homebrew-momo.git" "$RUNNER_TEMP/tap"
+          cd "$RUNNER_TEMP/tap"
+          mkdir -p Casks && cp "$RUNNER_TEMP/momo.rb" Casks/momo.rb
+          git add Casks/momo.rb
+          git diff --cached --quiet || { git commit -m "momo $VERSION" && git push; }
+
+      - name: Commit cask back to master
+        run: |
+          git fetch --depth=1 origin master
+          git checkout -f -B master origin/master
+          cp "$RUNNER_TEMP/momo.rb" packaging/homebrew/momo.rb
+          git add packaging/homebrew/momo.rb
+          git diff --cached --quiet || { git commit -m "release: update cask to $VERSION (sha)" && git push origin master; }

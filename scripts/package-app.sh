@@ -2,7 +2,7 @@
 #
 # Builds Momo.app (universal arm64 + x86_64) and a distributable zip for the
 # Homebrew cask. Ad-hoc signs the bundle so its Accessibility grant persists
-# across launches, then prints the sha256 you paste into the cask.
+# across launches, then prints the zip sha256 (CI writes it into the cask on release).
 #
 # Usage:  ./scripts/package-app.sh
 # Output: dist/Momo.app  and  dist/Momo-<version>.zip

@@ -81,6 +81,7 @@ Requirements: **macOS 13+** and a Swift 5.9+ toolchain (Xcode or the Swift toolc
 git clone <this-repo> momo && cd momo
 swift run Momo               # build and launch
 ./scripts/package-app.sh     # or build a distributable Momo.app + zip
+./scripts/install-app.sh     # or build and install into /Applications
 ```
 
 Momo has **no Dock icon** — it runs as a menu-bar accessory. Look for the 🥟 in your menu

@@ -15,46 +15,45 @@ Owner is **`simantaturja`**: app repo `simantaturja/momo`, tap repo `simantaturj
    gh repo create simantaturja/homebrew-momo --public --clone
    mkdir -p homebrew-momo/Casks
    ```
-
-## Each release
-
-1. **Bump the version** in all three places, kept in sync:
-   - `Sources/Momo/Info.plist` — `CFBundleShortVersionString` (and `CFBundleVersion`)
-   - `Sources/MomoCore/MomoCore.swift` — `version`
-   - `Tests/MomoCoreTests/SmokeTests.swift` — asserts `MomoCore.version`; update it or `swift test` fails.
-
-2. **Build the distributable app + zip:**
+3. **Tap token for CI** — create a fine-grained PAT with *Contents: read/write* on
+   `simantaturja/homebrew-momo` only, then:
    ```sh
-   ./scripts/package-app.sh
-   ```
-   This produces `dist/Momo.app`, `dist/Momo-<version>.zip`, and prints the **sha256**.
-
-3. **Tag and publish a GitHub release** with the zip attached:
-   ```sh
-   VERSION=0.1.0
-   git tag "v$VERSION" && git push origin "v$VERSION"
-   gh release create "v$VERSION" "dist/Momo-$VERSION.zip" \
-     --title "Momo $VERSION" --notes "See CHANGELOG."
+   gh secret set TAP_GITHUB_TOKEN -R simantaturja/momo
    ```
 
-4. **Update the cask** — edit `packaging/homebrew/momo.rb`:
-   - set `version`
-   - set `sha256` to the value printed in step 2
-   Then copy it into the tap and push:
-   ```sh
-   cp packaging/homebrew/momo.rb ../homebrew-momo/Casks/momo.rb
-   cd ../homebrew-momo && git add Casks/momo.rb \
-     && git commit -m "momo $VERSION" && git push
-   ```
+## Each release (automated)
 
-5. **Verify the whole install path locally:**
-   ```sh
-   brew untap simantaturja/momo 2>/dev/null; brew tap simantaturja/momo
-   brew trust simantaturja/momo
-   brew audit --cask --strict momo   # catches cask style/URL/sha problems
-   brew install --cask momo
-   xattr -r -d com.apple.quarantine /Applications/Momo.app && open -a Momo
-   ```
+`.github/workflows/release.yml` runs on any pushed `vX.Y.Z` tag: checks the tag matches
+Info.plist, runs `swift test`, packages, publishes the GitHub release, then writes the new
+`version` + `sha256` into the cask in the tap and back onto `master`.
+
+```sh
+./scripts/bump-version.sh 0.5.0          # Info.plist, MomoCore, SmokeTests, cask version
+swift test
+git commit -am "release: bump to 0.5.0"  # on your branch, then ff-merge into master
+git push origin master
+git tag v0.5.0 && git push origin v0.5.0  # triggers the release
+gh run watch -R simantaturja/momo         # then: git pull --ff-only (CI committed the sha)
+```
+
+If the tap step fails (e.g. missing secret), the release is already out; fix it and re-run
+the job — the release step re-uploads the asset so the cask sha stays correct. Only re-run
+when the tap step failed: a re-run rebuilds the zip, so its sha changes.
+
+Don't publish by hand while the workflow is enabled — pushing the tag already triggers it,
+and a hand-made zip's sha won't match the asset CI uploads.
+
+## Verify the install path
+
+After the release run is green:
+
+```sh
+brew untap simantaturja/momo 2>/dev/null; brew tap simantaturja/momo
+brew trust simantaturja/momo
+brew audit --cask --strict momo   # catches cask style/URL/sha problems
+brew install --cask momo
+xattr -r -d com.apple.quarantine /Applications/Momo.app && open -a Momo
+```
 
 ## Users install with
 
