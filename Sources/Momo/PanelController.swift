@@ -76,7 +76,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         NSLog("Momo open render: \(ms) ms")
         NSApp.activate(ignoringOtherApps: true)
         (content as? HistoryView)?.resetFilter()
-        (content as? HistoryView)?.collapseSelection()
+        (content as? HistoryView)?.selectNewest()
         (content as? HistoryView)?.focusSearch()
         onVisibilityChange?(true)
     }
@@ -84,6 +84,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     func hide() {
         guard panel.isVisible else { return }
         panel.orderOut(nil)
+        (content as? HistoryView)?.clearHover()
+        (content as? HistoryView)?.clearSearch()
         onVisibilityChange?(false)
     }
 

@@ -3,11 +3,9 @@ import ImageIO
 import MomoCore
 
 /// A kind badge: a subtle rounded container holding either a monochrome SF Symbol (tinted
-/// accent when its row is selected) or an image row's thumbnail. A pinned item gets an accent
-/// dot in the corner — the pin is shown here, never baked into the label string.
+/// accent when its row is selected) or an image row's thumbnail.
 private final class BadgeView: NSView {
     let iconView = NSImageView()
-    var pinned = false { didSet { needsDisplay = true } }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -25,11 +23,6 @@ private final class BadgeView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill(with: Theme.badgeFill)
-        guard pinned else { return }
-        let d: CGFloat = 7
-        let dot = NSRect(x: bounds.maxX - d - 1, y: bounds.maxY - d - 1, width: d, height: d)
-        Theme.accent.setFill()
-        NSBezierPath(ovalIn: dot).fill()
     }
 }
 
@@ -38,21 +31,41 @@ private extension NSBezierPath {
 }
 
 final class HistoryRowView: NSTableCellView {
+    /// Called when the row's checkbox is clicked; the owner toggles this row in the table selection.
+    var onCheckboxClick: ((HistoryRowView) -> Void)?
+    private let checkbox = NSButton()
     private let badge = BadgeView()
     private let label = NSTextField(labelWithString: "")
+    private let pinIcon = NSImageView()
     private let timeLabel = NSTextField(labelWithString: "")
     private var currentImagePath: String?
     private var showingSymbol = true
     private var selected = false
+    private var hovered = false
+    private var multiSelect = false
+
+    private static let uncheckedImage = NSImage(systemSymbolName: "circle", accessibilityDescription: "Select")
+    private static let checkedImage = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "Deselect")
 
     // Path-keyed cache of already-decoded thumbnails, shared across reused cells.
     private static let thumbCache = NSCache<NSString, NSImage>()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        checkbox.translatesAutoresizingMaskIntoConstraints = false
         badge.translatesAutoresizingMaskIntoConstraints = false
         label.translatesAutoresizingMaskIntoConstraints = false
-        timeLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        checkbox.isBordered = false
+        checkbox.imagePosition = .imageOnly
+        checkbox.imageScaling = .scaleProportionallyUpOrDown
+        checkbox.target = self
+        checkbox.action = #selector(checkboxClicked)
+        updateCheckbox()
+
+        pinIcon.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
+        pinIcon.symbolConfiguration = .init(pointSize: 10, weight: .regular)
+        pinIcon.contentTintColor = Theme.dimText
 
         label.font = .systemFont(ofSize: 13)
         label.lineBreakMode = .byTruncatingTail
@@ -66,17 +79,27 @@ final class HistoryRowView: NSTableCellView {
         timeLabel.setContentHuggingPriority(.required, for: .horizontal)
         timeLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        addSubview(badge); addSubview(label); addSubview(timeLabel)
+        // Pin + time in a stack so a hidden pin collapses out of the layout.
+        let trailing = NSStackView(views: [pinIcon, timeLabel])
+        trailing.spacing = 4
+        trailing.setHuggingPriority(.required, for: .horizontal)
+        trailing.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(checkbox); addSubview(badge); addSubview(label); addSubview(trailing)
         NSLayoutConstraint.activate([
-            badge.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            checkbox.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            checkbox.centerYAnchor.constraint(equalTo: centerYAnchor),
+            checkbox.widthAnchor.constraint(equalToConstant: 18),
+            checkbox.heightAnchor.constraint(equalToConstant: 18),
+            badge.leadingAnchor.constraint(equalTo: checkbox.trailingAnchor, constant: 8),
             badge.centerYAnchor.constraint(equalTo: centerYAnchor),
             badge.widthAnchor.constraint(equalToConstant: 28),
             badge.heightAnchor.constraint(equalToConstant: 28),
             label.leadingAnchor.constraint(equalTo: badge.trailingAnchor, constant: 12),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
-            timeLabel.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: 8),
-            timeLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            timeLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            trailing.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: 8),
+            trailing.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            trailing.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -85,12 +108,27 @@ final class HistoryRowView: NSTableCellView {
     func setSelected(_ value: Bool) {
         selected = value
         if showingSymbol { badge.iconView.contentTintColor = value ? Theme.accent : Theme.badgeSymbol }
+        updateCheckbox()
     }
+
+    /// Called by `PillRowView` on hover changes; a hovered row shows its checkbox.
+    func setHovered(_ value: Bool) { hovered = value; updateCheckbox() }
+
+    /// Set by `HistoryView` while ≥2 rows are selected; every row then shows its checkbox.
+    func setMultiSelect(_ value: Bool) { multiSelect = value; updateCheckbox() }
+
+    private func updateCheckbox() {
+        checkbox.isHidden = !(hovered || multiSelect)
+        checkbox.image = selected ? Self.checkedImage : Self.uncheckedImage
+        checkbox.contentTintColor = selected ? Theme.accent : Theme.badgeSymbol
+    }
+
+    @objc private func checkboxClicked() { onCheckboxClick?(self) }
 
     func configure(_ item: ClipboardItem, imagesDir: String) {
         label.stringValue = PreviewText.singleLine(item.preview)
         timeLabel.stringValue = RelativeTime.format(item.createdAt, now: Date())
-        badge.pinned = item.pinned
+        pinIcon.isHidden = !item.pinned
 
         guard item.kind == .image, let rel = item.imagePath else {
             showSymbol(for: item.kind)

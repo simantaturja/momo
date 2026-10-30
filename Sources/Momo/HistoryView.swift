@@ -36,7 +36,7 @@ private extension NSBezierPath {
     func fill(with color: NSColor) { color.setFill(); fill() }
 }
 
-final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
+final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate, NSMenuDelegate {
     private let index: HistoryIndex
     private let imagesDir: String
     private let onChoose: ([ClipboardItem]) -> Void
@@ -56,6 +56,9 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     private var selectedFileExtension: String?
     private let filterButton = NSButton()
     private let selectionCount = NSTextField(labelWithString: "")
+    private let hint = NSTextField(labelWithString: "↵ copy · click ○ or ⇧↑↓ to select more · ⌘P pin · ⌘⌫ delete")
+    private let actionBar = NSStackView()
+    private let copyButton = NSButton()
     // Keyboard range selection: ⇧↑/⇧↓ moves `cursorRow` and selects everything back to `anchorRow`.
     private var anchorRow = 0
     private var cursorRow = 0
@@ -129,6 +132,8 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         tableView.target = self
         tableView.action = #selector(rowClicked)
         tableView.doubleAction = #selector(chooseSelected)
+        tableView.menu = NSMenu()
+        tableView.menu?.delegate = self
 
         let scroll = NSScrollView()
         scroll.documentView = tableView
@@ -188,7 +193,6 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         let separator = NSBox()
         separator.boxType = .separator
         separator.translatesAutoresizingMaskIntoConstraints = false
-        let hint = NSTextField(labelWithString: "↵ copy · ⇧↑↓ select more · ⌘P pin · ⌘⌫ delete")
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = Theme.dimText
         hint.lineBreakMode = .byTruncatingTail
@@ -197,18 +201,45 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         selectionCount.font = .systemFont(ofSize: 11, weight: .medium)
         selectionCount.textColor = Theme.accent
         selectionCount.translatesAutoresizingMaskIntoConstraints = false
-        footer.addSubview(separator); footer.addSubview(hint); footer.addSubview(selectionCount)
+        selectionCount.isHidden = true
+
+        // Shown instead of the hint while ≥2 rows are selected.
+        let clearButton = NSButton()
+        styleFooterButton(clearButton, title: "Clear", color: .secondaryLabelColor, action: #selector(clearSelection))
+        styleFooterButton(copyButton, title: "Copy", color: Theme.accent, action: #selector(chooseSelected))
+        actionBar.setViews([clearButton, copyButton], in: .trailing)
+        actionBar.spacing = 12
+        actionBar.translatesAutoresizingMaskIntoConstraints = false
+        actionBar.isHidden = true
+
+        footer.addSubview(separator); footer.addSubview(hint); footer.addSubview(selectionCount); footer.addSubview(actionBar)
         NSLayoutConstraint.activate([
             separator.topAnchor.constraint(equalTo: footer.topAnchor),
             separator.leadingAnchor.constraint(equalTo: footer.leadingAnchor),
             separator.trailingAnchor.constraint(equalTo: footer.trailingAnchor),
             hint.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 12),
+            hint.trailingAnchor.constraint(lessThanOrEqualTo: footer.trailingAnchor, constant: -12),
             hint.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
-            selectionCount.leadingAnchor.constraint(greaterThanOrEqualTo: hint.trailingAnchor, constant: 8),
-            selectionCount.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -12),
+            selectionCount.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 12),
             selectionCount.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
+            actionBar.leadingAnchor.constraint(greaterThanOrEqualTo: selectionCount.trailingAnchor, constant: 8),
+            actionBar.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -12),
+            actionBar.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
         ])
         return footer
+    }
+
+    private func styleFooterButton(_ button: NSButton, title: String, color: NSColor, action: Selector) {
+        button.isBordered = false
+        button.attributedTitle = footerTitle(title, color: color)
+        button.target = self
+        button.action = action
+    }
+
+    private func footerTitle(_ title: String, color: NSColor) -> NSAttributedString {
+        NSAttributedString(string: title, attributes: [
+            .font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: color,
+        ])
     }
 
     func focusSearch() { window?.makeFirstResponder(searchField) }
@@ -292,10 +323,9 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         reload()
     }
 
-    /// A multi-selection never survives a close/reopen (a multi-copy re-captures as a new
-    /// top item, so the old rows would otherwise stay selected). Called by `PanelController.show()`.
-    func collapseSelection() {
-        guard tableView.selectedRowIndexes.count > 1, !results.isEmpty else { return }
+    /// Every open starts on the newest copy, scrolled to the top. Called by `PanelController.show()`.
+    func selectNewest() {
+        guard !results.isEmpty else { return }
         tableView.selectRowIndexes([0], byExtendingSelection: false)
         tableView.scrollRowToVisible(0)
         anchorRow = 0; cursorRow = 0
@@ -383,6 +413,50 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         tableView.scrollRowToVisible(cursorRow)
     }
 
+    /// Footer "Clear": collapse a multi-selection to the cursor row, or the first selected row if the cursor isn't selected.
+    @objc private func clearSelection() {
+        let sel = tableView.selectedRowIndexes
+        let row = sel.contains(cursorRow) ? cursorRow : (sel.first ?? cursorRow)
+        guard row < results.count else { return }
+        tableView.selectRowIndexes([row], byExtendingSelection: false)
+        tableView.scrollRowToVisible(row)
+        anchorRow = row; cursorRow = row
+        focusSearchKeepingText()
+    }
+
+    /// Checkbox click: toggle that row like ⌘-click, but never leave zero rows selected.
+    private func toggleRow(of cell: HistoryRowView) {
+        let row = tableView.row(for: cell)
+        guard row >= 0 else { return }
+        var rows = tableView.selectedRowIndexes
+        if rows.contains(row) {
+            guard rows.count > 1 else { return }
+            rows.remove(row)
+        } else {
+            rows.insert(row)
+        }
+        tableView.selectRowIndexes(rows, byExtendingSelection: false)
+        anchorRow = row; cursorRow = row
+        focusSearchKeepingText()
+    }
+
+    /// Re-focusing an already-editing field would select all its text, so the next keystroke replaces the query.
+    private func focusSearchKeepingText() {
+        if searchField.currentEditor() == nil { window?.makeFirstResponder(searchField) }
+    }
+
+    /// The query never survives a hide, so the next open lists by recency again. Runs on hide, off the open path.
+    func clearSearch() {
+        guard !searchField.stringValue.isEmpty else { return }
+        searchField.stringValue = ""
+        reload()
+    }
+
+    /// Hover never survives a hide: the ordered-out panel gets no mouseExited.
+    func clearHover() {
+        tableView.enumerateAvailableRowViews { rowView, _ in (rowView as? PillRowView)?.clearHover() }
+    }
+
     @objc private func chooseSelected() {
         let items = selectedItems()
         guard !items.isEmpty else { return }
@@ -404,17 +478,55 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
 
     func tableViewSelectionDidChange(_ notification: Notification) {
         let n = tableView.selectedRowIndexes.count
-        selectionCount.stringValue = n > 1 ? "\(n) selected" : ""
+        let multi = n > 1
+        hint.isHidden = multi
+        selectionCount.isHidden = !multi
+        actionBar.isHidden = !multi
+        if multi {
+            selectionCount.stringValue = "\(n) selected"
+            copyButton.attributedTitle = footerTitle("Copy \(n)", color: Theme.accent)
+        }
+        tableView.enumerateAvailableRowViews { rowView, _ in
+            (rowView.view(atColumn: 0) as? HistoryRowView)?.setMultiSelect(multi)
+        }
     }
+
+    // Right-click menu, rebuilt for the clicked row. Like Finder, an unselected row is selected alone first.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let row = tableView.clickedRow
+        guard row >= 0, row < results.count else { return }
+        if !tableView.selectedRowIndexes.contains(row) {
+            tableView.selectRowIndexes([row], byExtendingSelection: false)
+            anchorRow = row; cursorRow = row
+        }
+        let items = selectedItems()
+        let pin = items.contains { !$0.pinned }   // mirrors AppCoordinator's pin-all-unless-all-pinned
+        for (title, action) in [(items.count > 1 ? "Copy \(items.count) Items" : "Copy", #selector(menuCopy)),
+                                (pin ? "Pin" : "Unpin", #selector(menuPinToggle)),
+                                ("Delete", #selector(menuDelete))] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.representedObject = items
+            menu.addItem(item)
+        }
+    }
+
+    @objc private func menuCopy(_ sender: NSMenuItem) { (sender.representedObject as? [ClipboardItem]).map(onChoose) }
+    @objc private func menuPinToggle(_ sender: NSMenuItem) { (sender.representedObject as? [ClipboardItem]).map(onPinToggle) }
+    @objc private func menuDelete(_ sender: NSMenuItem) { (sender.representedObject as? [ClipboardItem]).map(onDelete) }
 
     // DataSource / Delegate
     func numberOfRows(in tableView: NSTableView) -> Int { results.count }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let id = NSUserInterfaceItemIdentifier("row")
         let cell = (tableView.makeView(withIdentifier: id, owner: self) as? HistoryRowView) ?? {
-            let v = HistoryRowView(); v.identifier = id; return v
+            let v = HistoryRowView(); v.identifier = id
+            v.onCheckboxClick = { [weak self] cell in self?.toggleRow(of: cell) }
+            return v
         }()
         cell.configure(results[row], imagesDir: imagesDir)
+        cell.setMultiSelect(tableView.numberOfSelectedRows > 1)
         return cell
     }
 
