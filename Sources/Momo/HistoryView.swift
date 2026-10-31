@@ -32,6 +32,37 @@ private final class SearchCapsule: NSView {
     }
 }
 
+/// Borderless footer button that shows a soft rounded fill while the pointer is over it.
+private final class HoverButton: NSButton {
+    var hoverFill = Theme.hoverFill
+    private var hovered = false { didSet { if hovered != oldValue { needsDisplay = true } } }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        isBordered = false
+        // .inVisibleRect tracks the button's bounds automatically; one area for life.
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self, userInfo: nil))
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// Room around the title for the fill.
+    override var intrinsicContentSize: NSSize {
+        let size = super.intrinsicContentSize
+        return NSSize(width: size.width + 16, height: size.height + 6)
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+    /// No mouseExited arrives once the footer hides it (or the panel closes).
+    override func viewDidHide() { super.viewDidHide(); hovered = false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if hovered { NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill(with: hoverFill) }
+        super.draw(dirtyRect)
+    }
+}
+
 private extension NSBezierPath {
     func fill(with color: NSColor) { color.setFill(); fill() }
 }
@@ -58,9 +89,13 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     private let countLabel = NSTextField(labelWithString: "")
     private let hint = NSTextField(labelWithString: "↵ Copy   ⌘1–9 Quick copy   ○ or ⇧↑↓ Select more   ⌘P Pin   ⌘⌫ Delete")
     private let actionBar = NSStackView()
-    private let copyButton = NSButton()
+    private let copyButton = HoverButton()
     // Holding ⌘ alone swaps the first nine rows' times for their ⌘1…⌘9 quick keys.
     private var quickKeys = false
+    // A row's checkbox started the current selection: every row shows its checkbox, even
+    // with one row ticked. Ends when the selection changes any other way.
+    private var checking = false
+    private var togglingCheckbox = false
     private var flagsMonitor: Any?
     // Keyboard range selection: ⇧↑/⇧↓ moves `cursorRow` and selects everything back to `anchorRow`.
     private var anchorRow = 0
@@ -287,9 +322,10 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         countLabel.translatesAutoresizingMaskIntoConstraints = false
 
         // Shown instead of the hint while ≥2 rows are selected.
-        let clearButton = NSButton()
+        let clearButton = HoverButton()
         styleFooterButton(clearButton, title: "Clear", color: .secondaryLabelColor, action: #selector(clearSelection))
         styleFooterButton(copyButton, title: "Copy", color: Theme.accent, action: #selector(chooseSelected))
+        copyButton.hoverFill = Theme.selectionFill
         actionBar.setViews([clearButton, copyButton], in: .trailing)
         actionBar.spacing = 12
         actionBar.translatesAutoresizingMaskIntoConstraints = false
@@ -459,6 +495,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     func reload(preserveSelection: Bool = false) {
         let start = DispatchTime.now()
         let preserve = preserveSelection && window?.isVisible == true
+        if !preserve { checking = false }
         let keep = preserve ? Set(selectedItems().map(\.id)) : []
         let place = tableView.selectedRowIndexes.first
         results = index.search(searchField.stringValue, scope: scope)
@@ -505,8 +542,8 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         let rows = selectedRows()
         preview.show(rows, imagesDir: imagesDir)
         let n = results.count
-        // While several rows are selected, Clear / Copy N replace the key hints.
-        let multi = rows.count > 1
+        // While ticking rows or with several selected, Clear / Copy N replace the key hints.
+        let multi = isChecklist
         hint.isHidden = multi
         actionBar.isHidden = !multi
         if multi {
@@ -559,26 +596,48 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         let sel = tableView.selectedRowIndexes
         let row = sel.contains(cursorRow) ? cursorRow : (sel.first ?? cursorRow)
         guard row < results.count else { return }
-        tableView.selectRowIndexes([row], byExtendingSelection: false)
+        checking = false
+        if sel == [row] { syncChecklist() } else { tableView.selectRowIndexes([row], byExtendingSelection: false) }
         tableView.scrollRowToVisible(row)
         anchorRow = row; cursorRow = row
         focusSearchKeepingText()
     }
 
-    /// Checkbox click: toggle that row like ⌘-click, but never leave zero rows selected.
+    /// Checkbox click. The first tick selects just that row (the keyboard cursor's row isn't
+    /// swept in); later ticks add or remove rows. Unticking the last one ends the checklist and
+    /// leaves that row selected as the cursor.
     private func toggleRow(of cell: HistoryRowView) {
         let row = tableView.row(for: cell)
         guard row >= 0 else { return }
         var rows = tableView.selectedRowIndexes
-        if rows.contains(row) {
-            guard rows.count > 1 else { return }
+        if !isChecklist {
+            rows = [row]
+        } else if rows.contains(row) {
             rows.remove(row)
         } else {
             rows.insert(row)
         }
-        tableView.selectRowIndexes(rows, byExtendingSelection: false)
+        checking = !rows.isEmpty
+        if rows.isEmpty || rows == tableView.selectedRowIndexes {
+            syncChecklist()   // no selection change will report it
+        } else {
+            togglingCheckbox = true
+            tableView.selectRowIndexes(rows, byExtendingSelection: false)
+            togglingCheckbox = false
+        }
         anchorRow = row; cursorRow = row
         focusSearchKeepingText()
+    }
+
+    /// Rows show checkboxes (and the footer Clear / Copy N) while ticking or with several selected.
+    private var isChecklist: Bool { checking || tableView.numberOfSelectedRows > 1 }
+
+    private func syncChecklist() {
+        let on = isChecklist
+        tableView.enumerateAvailableRowViews { rowView, _ in
+            (rowView.view(atColumn: 0) as? HistoryRowView)?.setMultiSelect(on)
+        }
+        refreshDetail()
     }
 
     /// Re-focusing an already-editing field would select all its text, so the next keystroke replaces the query.
@@ -618,11 +677,8 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
-        refreshDetail()
-        let multi = tableView.numberOfSelectedRows > 1
-        tableView.enumerateAvailableRowViews { rowView, _ in
-            (rowView.view(atColumn: 0) as? HistoryRowView)?.setMultiSelect(multi)
-        }
+        if !togglingCheckbox { checking = false }   // arrows, clicks, Clear end the checklist
+        syncChecklist()
     }
 
     // MARK: Right-click menu
@@ -683,7 +739,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
             return v
         }()
         cell.configure(results[row], index: row, imagesDir: imagesDir, showQuickKey: quickKeys)
-        cell.setMultiSelect(tableView.numberOfSelectedRows > 1)
+        cell.setMultiSelect(isChecklist)
         return cell
     }
 
