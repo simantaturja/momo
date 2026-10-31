@@ -177,8 +177,11 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
             scopeBar.topAnchor.constraint(equalTo: capsule.bottomAnchor, constant: 8),
             scopeBar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             scopeBar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            // A fixed height, so the list (not the bar) takes the spare space. With the 6pt gap
+            // below, the list gets 343pt: all nine ⌘1–⌘9 rows (9 × 38pt).
+            scopeBar.heightAnchor.constraint(equalToConstant: 22),
 
-            topSeparator.topAnchor.constraint(equalTo: scopeBar.bottomAnchor, constant: 8),
+            topSeparator.topAnchor.constraint(equalTo: scopeBar.bottomAnchor, constant: 6),
             topSeparator.leadingAnchor.constraint(equalTo: leadingAnchor),
             topSeparator.trailingAnchor.constraint(equalTo: trailingAnchor),
             topSeparator.heightAnchor.constraint(equalToConstant: 1),
