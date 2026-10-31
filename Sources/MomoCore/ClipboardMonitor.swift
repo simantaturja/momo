@@ -4,16 +4,20 @@ public final class ClipboardMonitor {
     private let pasteboard: PasteboardReading
     private let writeImageBlob: (Data) throws -> String
     private let allowsConcealed: () -> Bool
+    private let sourceApp: () -> String?
     private var lastChangeCount: Int?
 
     public var onNewItem: ((ClipboardItem) -> Void)?
 
     /// `allowsConcealed` is asked on every capture, so a settings change applies to the next copy.
+    /// `sourceApp` is asked once per captured copy for the name of the app it came from.
     public init(pasteboard: PasteboardReading, writeImageBlob: @escaping (Data) throws -> String,
-                allowsConcealed: @escaping () -> Bool = { false }) {
+                allowsConcealed: @escaping () -> Bool = { false },
+                sourceApp: @escaping () -> String? = { nil }) {
         self.pasteboard = pasteboard
         self.writeImageBlob = writeImageBlob
         self.allowsConcealed = allowsConcealed
+        self.sourceApp = sourceApp
     }
 
     public func poll(now: Date) {
@@ -23,7 +27,8 @@ public final class ClipboardMonitor {
 
         guard PrivacyFilter.shouldStore(pasteboardTypes: pasteboard.types,
                                         allowConcealed: allowsConcealed()) else { return }
-        guard let item = buildItem(now: now) else { return }
+        guard var item = buildItem(now: now) else { return }
+        item.sourceApp = sourceApp()
         onNewItem?(item)
     }
 

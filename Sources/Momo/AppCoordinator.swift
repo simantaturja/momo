@@ -64,7 +64,7 @@ final class AppCoordinator {
         let reader = NSPasteboardReader()
         monitor = ClipboardMonitor(pasteboard: reader, writeImageBlob: { [store] data in
             try store.writeImageBlob(data)
-        }, allowsConcealed: { Settings.savePasswords })
+        }, allowsConcealed: { Settings.savePasswords }, sourceApp: Self.frontmostAppName)
 
         index.replaceAll((try? store.recent(limit: Settings.maxItems)) ?? [])
         monitor.onNewItem = { [weak self] item in
@@ -85,6 +85,14 @@ final class AppCoordinator {
         // Reclaim any blobs left behind by a prior crash between blob-write and row-commit.
         let store = self.store
         pollQueue.async { _ = try? store.reapOrphanBlobs() }
+    }
+
+    /// The app in front when a copy is seen, i.e. the one it was copied from; nil when that's
+    /// Momo itself. Called on the poll queue (NSRunningApplication's properties are atomic).
+    private static func frontmostAppName() -> String? {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return nil }
+        return app.localizedName
     }
 
     func runPrune() {

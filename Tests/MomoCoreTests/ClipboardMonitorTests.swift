@@ -136,4 +136,23 @@ final class ClipboardMonitorTests: XCTestCase {
         XCTAssertEqual(captured?.kind, .file)
         XCTAssertEqual(captured?.filePaths, ["/tmp/doc.pdf"])
     }
+
+    func testRecordsTheSourceAppOfEachCopy() {
+        // Asked per capture, for every kind: the app in front when this copy was seen.
+        let pb = FakePasteboard()
+        var frontmost: String? = "Safari"
+        let monitor = ClipboardMonitor(pasteboard: pb, writeImageBlob: { _ in "x.png" },
+                                       sourceApp: { frontmost })
+        var captured: [ClipboardItem] = []
+        monitor.onNewItem = { captured.append($0) }
+
+        pb.stringValue = "hello"; pb.changeCount = 1; monitor.poll(now: Date())
+        frontmost = "Finder"
+        pb.fileURLValues = ["/tmp/a.txt"]; pb.changeCount = 2; monitor.poll(now: Date())
+        frontmost = nil   // unknown, or Momo itself
+        pb.fileURLValues = []; pb.imageBytes = Data([0x1]); pb.changeCount = 3; monitor.poll(now: Date())
+
+        XCTAssertEqual(captured.map(\.kind), [.text, .file, .image])
+        XCTAssertEqual(captured.map(\.sourceApp), ["Safari", "Finder", nil])
+    }
 }

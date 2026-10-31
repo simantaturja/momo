@@ -29,7 +29,8 @@ public final class HistoryIndex {
         if let existing = rows.first(where: { $0.item.contentHash == item.contentHash })?.item {
             item = ClipboardItem(id: existing.id, kind: item.kind, preview: item.preview,
                                   text: item.text, imagePath: existing.imagePath, filePaths: item.filePaths,
-                                  createdAt: item.createdAt, pinned: existing.pinned, contentHash: item.contentHash)
+                                  createdAt: item.createdAt, pinned: existing.pinned, contentHash: item.contentHash,
+                                  sourceApp: existing.sourceApp)
         }
         rows.removeAll { $0.item.contentHash == item.contentHash }
         rows.insert(Self.row(item), at: 0)

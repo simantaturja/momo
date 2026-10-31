@@ -1,3 +1,4 @@
+import SQLite3
 import XCTest
 @testable import MomoCore
 
@@ -12,10 +13,12 @@ final class StoreTests: XCTestCase {
         return (try Store(path: ":memory:", imagesDirectory: dir), dir)
     }
 
-    private func textItem(_ s: String, at t: TimeInterval, pinned: Bool = false) -> ClipboardItem {
+    private func textItem(_ s: String, at t: TimeInterval, pinned: Bool = false,
+                          source: String? = nil) -> ClipboardItem {
         ClipboardItem(kind: .text, preview: s, text: s, imagePath: nil, filePaths: [],
                       createdAt: Date(timeIntervalSince1970: t), pinned: pinned,
-                      contentHash: ClipboardItem.contentHash(kind: .text, text: s, imageHash: nil, filePaths: []))
+                      contentHash: ClipboardItem.contentHash(kind: .text, text: s, imageHash: nil, filePaths: []),
+                      sourceApp: source)
     }
 
     private func imageItem(path: String, hash: String, at t: TimeInterval,
@@ -186,5 +189,66 @@ final class StoreTests: XCTestCase {
         XCTAssertTrue(previews.contains("oldtext"), "text is never aged out")
         XCTAssertFalse(exists(dir, oldUnpinned), "aged-out blob removed from disk")
         XCTAssertTrue(exists(dir, oldPinned), "pinned blob retained on disk")
+    }
+
+    func testSourceAppRoundTrips() throws {
+        let store = try makeStore()
+        try store.upsert(textItem("a", at: 1, source: "Safari"))
+        try store.upsert(textItem("b", at: 2))   // source unknown
+        XCTAssertEqual(try store.recent(limit: 10).map(\.sourceApp), [nil, "Safari"])
+    }
+
+    func testDedupeKeepsTheFirstSourceApp() throws {
+        // A re-copy from Momo's panel is captured while Momo, or the app it hands focus back to,
+        // is in front — overwriting would credit the wrong app.
+        let store = try makeStore()
+        try store.upsert(textItem("a", at: 1, source: "Safari"))
+        try store.upsert(textItem("a", at: 2, source: "Notes"))
+        let recent = try store.recent(limit: 10)
+        XCTAssertEqual(recent.map(\.sourceApp), ["Safari"])
+        XCTAssertEqual(recent.map(\.createdAt), [Date(timeIntervalSince1970: 2)])   // recency still bumped
+    }
+
+    func testUpgradesADatabaseFromBeforeSourceAppWithoutLosingRows() throws {
+        // A store that fails to open gets the user's whole history quarantined, so the upgrade
+        // path must work on a real file in the previous schema.
+        let dir = NSTemporaryDirectory() + "momo-test-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let path = (dir as NSString).appendingPathComponent("history.sqlite")
+        try runSQL(at: path, """
+            CREATE TABLE items (
+                id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                preview TEXT NOT NULL,
+                text TEXT,
+                imagePath TEXT,
+                filePaths TEXT NOT NULL DEFAULT '',
+                createdAt DOUBLE NOT NULL,
+                pinned INTEGER NOT NULL DEFAULT 0,
+                contentHash TEXT NOT NULL UNIQUE,
+                imageBytes INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO items (id, kind, preview, text, createdAt, pinned, contentHash)
+            VALUES ('\(UUID().uuidString)', 'text', 'old', 'old', 1, 1, 'old-hash');
+            """)
+
+        let store = try Store(path: path, imagesDirectory: dir)
+        try store.upsert(textItem("new", at: 2, source: "Safari"))
+        let recent = try store.recent(limit: 10)
+        XCTAssertEqual(recent.map(\.preview), ["old", "new"])   // old row kept, still pinned
+        XCTAssertEqual(recent.map(\.sourceApp), [nil, "Safari"])
+
+        // Reopening the upgraded file must not try to add the column again.
+        XCTAssertEqual(try Store(path: path, imagesDirectory: dir).recent(limit: 10).map(\.sourceApp),
+                       [nil, "Safari"])
+    }
+
+    private func runSQL(at path: String, _ sql: String) throws {
+        var db: OpaquePointer?
+        defer { sqlite3_close(db) }
+        guard sqlite3_open(path, &db) == SQLITE_OK, sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK else {
+            throw NSError(domain: "sqlite", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: String(cString: sqlite3_errmsg(db))])
+        }
     }
 }

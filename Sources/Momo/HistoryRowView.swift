@@ -140,6 +140,7 @@ final class HistoryRowView: NSTableCellView {
         relativeTime = RelativeTime.format(row.item.createdAt, now: Date())
         setQuickKey(showQuickKey)
         pinIcon.isHidden = !row.item.pinned
+        toolTip = row.item.sourceApp.map { "Copied from \($0)" }
         badge.swatch = nil
         currentImagePath = nil
         setLabel(imageSize: nil)
