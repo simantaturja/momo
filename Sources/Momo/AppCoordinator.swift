@@ -64,7 +64,7 @@ final class AppCoordinator {
         let reader = NSPasteboardReader()
         monitor = ClipboardMonitor(pasteboard: reader, writeImageBlob: { [store] data in
             try store.writeImageBlob(data)
-        })
+        }, allowsConcealed: { Settings.savePasswords })
 
         index.replaceAll((try? store.recent(limit: Settings.maxItems)) ?? [])
         monitor.onNewItem = { [weak self] item in

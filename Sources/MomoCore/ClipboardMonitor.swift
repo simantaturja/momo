@@ -3,13 +3,17 @@ import Foundation
 public final class ClipboardMonitor {
     private let pasteboard: PasteboardReading
     private let writeImageBlob: (Data) throws -> String
+    private let allowsConcealed: () -> Bool
     private var lastChangeCount: Int?
 
     public var onNewItem: ((ClipboardItem) -> Void)?
 
-    public init(pasteboard: PasteboardReading, writeImageBlob: @escaping (Data) throws -> String) {
+    /// `allowsConcealed` is asked on every capture, so a settings change applies to the next copy.
+    public init(pasteboard: PasteboardReading, writeImageBlob: @escaping (Data) throws -> String,
+                allowsConcealed: @escaping () -> Bool = { false }) {
         self.pasteboard = pasteboard
         self.writeImageBlob = writeImageBlob
+        self.allowsConcealed = allowsConcealed
     }
 
     public func poll(now: Date) {
@@ -17,7 +21,8 @@ public final class ClipboardMonitor {
         guard count != lastChangeCount else { return }
         lastChangeCount = count
 
-        guard PrivacyFilter.shouldStore(pasteboardTypes: pasteboard.types) else { return }
+        guard PrivacyFilter.shouldStore(pasteboardTypes: pasteboard.types,
+                                        allowConcealed: allowsConcealed()) else { return }
         guard let item = buildItem(now: now) else { return }
         onNewItem?(item)
     }

@@ -43,7 +43,7 @@ absolute path into the module cache; a stale cache fails with
 - **Do NOT add a test harness or DI to the shell.** `Paster`/`Settings`/`PanelController`/
   `HotkeyManager` touch AppKit / `UserDefaults` / `NSPasteboard.general` directly by design; there
   is no logic in them worth a seam. App-target changes are compile+build verified, not unit-tested.
-- Baseline: **88 tests, all green.** Keep them green; show the output before claiming done.
+- Baseline: **94 tests, all green.** Keep them green; show the output before claiming done.
 
 ## Data model & invariants (don't break these)
 
@@ -54,7 +54,9 @@ absolute path into the module cache; a stale cache fails with
   bytes and age. Pins are exempt. `prune` returns the number deleted; callers skip the UI refresh
   when it's 0. Blobs are deleted with their rows; orphaned blobs are reaped on launch.
 - **Privacy:** `PrivacyFilter` drops pasteboards flagged concealed/transient/auto-generated at
-  ingest. Never persist anything that bypasses it.
+  ingest. Concealed (passwords) is kept only when the user opts in (`Settings.savePasswords`,
+  off by default); transient/auto-generated are always dropped. Never persist anything that
+  bypasses it.
 
 ## Working style (agent loop)
 
