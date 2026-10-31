@@ -15,7 +15,7 @@ final class PrivacyFilterTests: XCTestCase {
         XCTAssertFalse(PrivacyFilter.shouldStore(pasteboardTypes: ["public.utf8-plain-text", "org.nspasteboard.ConcealedType"]))
     }
 
-    func testConcealedDroppedByDefault() {
+    func testConcealedDroppedWhenNotAllowed() {
         // Passwords from a password manager stay out unless the user opts in.
         XCTAssertFalse(PrivacyFilter.shouldStore(pasteboardTypes: ["public.utf8-plain-text", "org.nspasteboard.ConcealedType"],
                                                  allowConcealed: false))

@@ -43,7 +43,7 @@ absolute path into the module cache; a stale cache fails with
 - **Do NOT add a test harness or DI to the shell.** `Paster`/`Settings`/`PanelController`/
   `HotkeyManager` touch AppKit / `UserDefaults` / `NSPasteboard.general` directly by design; there
   is no logic in them worth a seam. App-target changes are compile+build verified, not unit-tested.
-- Baseline: **94 tests, all green.** Keep them green; show the output before claiming done.
+- Baseline: **95 tests, all green.** Keep them green; show the output before claiming done.
 
 ## Data model & invariants (don't break these)
 
