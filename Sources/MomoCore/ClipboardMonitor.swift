@@ -10,7 +10,8 @@ public final class ClipboardMonitor {
     public var onNewItem: ((ClipboardItem) -> Void)?
 
     /// `allowsConcealed` is asked on every capture, so a settings change applies to the next copy.
-    /// `sourceApp` is asked once per captured copy for the name of the app it came from.
+    /// `sourceApp` names the app in front when a copy is seen; it isn't asked for the clip found at
+    /// launch or for Momo's own copies.
     public init(pasteboard: PasteboardReading, writeImageBlob: @escaping (Data) throws -> String,
                 allowsConcealed: @escaping () -> Bool = { false },
                 sourceApp: @escaping () -> String? = { nil }) {
