@@ -88,6 +88,43 @@ final class StoreTests: XCTestCase {
         XCTAssertFalse(exists(dir, p2), "redundant incoming blob must be reclaimed, not orphaned")
     }
 
+    func testRecopyOfARowMissingFromTheIndexPrependsTheStoredId() throws {
+        let store = try makeStore()
+        let maxItems = 3
+        try store.upsert(textItem("pin1", at: 10, pinned: true))
+        try store.upsert(textItem("pin2", at: 11, pinned: true))
+        let old = textItem("n1", at: 1)
+        try store.upsert(old)
+        for i in 2...maxItems { try store.upsert(textItem("n\(i)", at: TimeInterval(i))) }
+        // Pins are exempt from the cap, so the store keeps every row...
+        XCTAssertEqual(try store.prune(maxItems: maxItems, maxImageBytes: .max, imageMaxAge: .infinity,
+                                       now: Date(timeIntervalSince1970: 100)), 0)
+        XCTAssertTrue(try store.recent(limit: 100).contains { $0.id == old.id })
+        // ...but the index loads as the app does, where pins count toward the limit.
+        let index = HistoryIndex()
+        index.replaceAll(try store.recent(limit: maxItems))
+        XCTAssertFalse(index.search("").contains { $0.item.contentHash == old.contentHash })
+
+        let recopy = textItem("n1", at: 200)   // same content, fresh UUID
+        XCTAssertNotEqual(recopy.id, old.id)
+        index.prepend(try store.upsert(recopy))
+
+        let front = index.search("").first!.item
+        XCTAssertEqual(front.id, old.id, "the index must carry the stored id, not the incoming one")
+        try store.setPinned(id: front.id, pinned: true)
+        XCTAssertEqual(try store.recent(limit: 100).filter(\.pinned).map(\.preview), ["n1", "pin2", "pin1"])
+    }
+
+    func testUpsertReturnsTheStoredImageRowOnADedupeHit() throws {
+        let store = try makeStore()
+        let kept = try store.writeImageBlob(Data(count: 8))
+        try store.upsert(imageItem(path: kept, hash: "img-hash", at: 1, pinned: true))
+        let incoming = imageItem(path: try store.writeImageBlob(Data(count: 8)), hash: "img-hash", at: 2)
+        let stored = try store.upsert(incoming)   // dedupe hit: the incoming blob is reclaimed
+        XCTAssertEqual(stored.imagePath, kept, "must point at the kept blob, not the reclaimed one")
+        XCTAssertEqual(stored, try store.recent(limit: 10).first, "the stored id, pin and blob, with the bumped time")
+    }
+
     func testPruneEnforcesImageByteCap() throws {
         let (store, dir) = try makeStoreWithDir()
         let bytes = Data(count: 100)

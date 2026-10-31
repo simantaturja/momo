@@ -12,7 +12,7 @@ Native Swift + AppKit. No Electron. No lag. No telemetry.
 ![Platform](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange?logo=swift)
 ![UI](https://img.shields.io/badge/UI-AppKit-blue)
-![Tests](https://img.shields.io/badge/tests-95%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-97%20passing-brightgreen)
 
 </div>
 
@@ -200,7 +200,7 @@ untestable-by-design adapters (menu bar, panel, hotkey, keystroke synthesis).
 ```sh
 swift build            # compile everything
 swift run Momo         # launch the app
-swift test             # run the MomoCore suite (88 tests)
+swift test             # run the MomoCore suite (97 tests)
 ```
 
 Core behavior is developed test-first — dedupe, pruning (count / byte-cap / age-out),

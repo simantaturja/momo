@@ -28,15 +28,20 @@ public final class Store {
         }
     }
 
-    public func upsert(_ item: ClipboardItem) throws {
+    /// Returns the row as stored: on a dedupe hit, the existing row (its id, pin and blob)
+    /// with the bumped time — not the incoming item.
+    @discardableResult
+    public func upsert(_ item: ClipboardItem) throws -> ClipboardItem {
         try dbQueue.write { db in
-            if let existingId = try String.fetchOne(db,
-                sql: "SELECT id FROM items WHERE contentHash = ?", arguments: [item.contentHash]) {
+            if var existing = try Row.fetchOne(db,
+                sql: "SELECT * FROM items WHERE contentHash = ?", arguments: [item.contentHash]).map(Store.decode) {
                 try db.execute(sql: "UPDATE items SET createdAt = ? WHERE id = ?",
-                               arguments: [item.createdAt.timeIntervalSince1970, existingId])
+                               arguments: [item.createdAt.timeIntervalSince1970, existing.id.uuidString])
                 // Dedupe hit: the existing row keeps its own blob, so the just-written
                 // incoming image blob is redundant — reclaim it instead of orphaning it.
                 if item.kind == .image { removeBlob(item.imagePath) }
+                existing.createdAt = item.createdAt
+                return existing
             } else {
                 try db.execute(sql: """
                     INSERT INTO items (id, kind, preview, text, imagePath, filePaths, createdAt, pinned, contentHash, imageBytes)
@@ -47,6 +52,7 @@ public final class Store {
                         item.createdAt.timeIntervalSince1970, item.pinned ? 1 : 0,
                         item.contentHash, imageBytesFor(item),
                     ])
+                return item
             }
         }
     }

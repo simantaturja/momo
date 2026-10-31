@@ -69,14 +69,15 @@ final class AppCoordinator {
         index.replaceAll((try? store.recent(limit: Settings.maxItems)) ?? [])
         monitor.onNewItem = { [weak self] item in
             guard let self else { return }
+            let stored: ClipboardItem
             do {
-                try self.store.upsert(item)
+                stored = try self.store.upsert(item)
             } catch {
                 NSLog("Momo: failed to persist clipboard item: \(error)")
                 return   // don't show an item we didn't save
             }
             DispatchQueue.main.async {
-                self.index.prepend(item)
+                self.index.prepend(stored)   // the stored row: on a dedupe hit, its id, pin and blob
                 self.historyView.reload(preserveSelection: true)
             }
             self.pollQueue.async { self.runPrune() }
