@@ -54,7 +54,7 @@ private final class HoverButton: NSButton {
 
     override func mouseEntered(with event: NSEvent) { hovered = true }
     override func mouseExited(with event: NSEvent) { hovered = false }
-    /// No mouseExited arrives once the footer hides it (or the panel closes).
+    /// No mouseExited arrives once the footer bar hides it.
     override func viewDidHide() { super.viewDidHide(); hovered = false }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -95,7 +95,8 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     // A row's checkbox started the current selection: every row shows its checkbox, even
     // with one row ticked. Ends when the selection changes any other way.
     private var checking = false
-    private var togglingCheckbox = false
+    // Set around selection changes that must not end the checklist (ticks, preserving reloads).
+    private var keepChecklist = false
     private var flagsMonitor: Any?
     // Keyboard range selection: ⇧↑/⇧↓ moves `cursorRow` and selects everything back to `anchorRow`.
     private var anchorRow = 0
@@ -502,7 +503,9 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         tableView.reloadData()
         let kept = IndexSet(results.indices.filter { keep.contains(results[$0].item.id) })
         if let first = kept.first, let last = kept.last {
+            keepChecklist = preserve   // a pin, capture or delete moving the ticked rows keeps the ticks
             tableView.selectRowIndexes(kept, byExtendingSelection: false)
+            keepChecklist = false
             anchorRow = first; cursorRow = last
         } else if !results.isEmpty {
             let row = preserve ? min(place ?? 0, results.count - 1) : 0
@@ -621,9 +624,9 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         if rows.isEmpty || rows == tableView.selectedRowIndexes {
             syncChecklist()   // no selection change will report it
         } else {
-            togglingCheckbox = true
+            keepChecklist = true
             tableView.selectRowIndexes(rows, byExtendingSelection: false)
-            togglingCheckbox = false
+            keepChecklist = false
         }
         anchorRow = row; cursorRow = row
         focusSearchKeepingText()
@@ -677,7 +680,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
-        if !togglingCheckbox { checking = false }   // arrows, clicks, Clear end the checklist
+        if !keepChecklist { checking = false }   // arrows, clicks, Clear end the checklist
         syncChecklist()
     }
 
