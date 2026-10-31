@@ -32,6 +32,25 @@ final class PreviewTextTests: XCTestCase {
         XCTAssertEqual(long, String(repeating: "a", count: 2_000) + "…")
     }
 
+    func testFitsExcerptMeansExcerptKeepsTheWholeText() {
+        XCTAssertTrue(PreviewText.fitsExcerpt("hello", limit: 5))
+        XCTAssertTrue(PreviewText.fitsExcerpt("hello", limit: 10))
+        XCTAssertTrue(PreviewText.fitsExcerpt(""))
+        XCTAssertFalse(PreviewText.fitsExcerpt("hello!", limit: 5))
+        XCTAssertTrue(PreviewText.fitsExcerpt(String(repeating: "a", count: 2_000)))    // default limit is 2,000
+        XCTAssertFalse(PreviewText.fitsExcerpt(String(repeating: "a", count: 2_001)))
+    }
+
+    func testJoinedExcerptEqualsTheExcerptOfTheJoin() {
+        XCTAssertEqual(PreviewText.joinedExcerpt(["ab", "cd"], limit: 10), "ab\ncd")
+        XCTAssertEqual(PreviewText.joinedExcerpt(["ab", "c"], limit: 4), "ab\nc")      // exactly the limit
+        XCTAssertEqual(PreviewText.joinedExcerpt(["abc", "def"], limit: 5), "abc\nd…")
+        XCTAssertEqual(PreviewText.joinedExcerpt(["a", "b", "c"], limit: 4), "a\nb\n…")
+        XCTAssertEqual(PreviewText.joinedExcerpt([]), "")
+        let huge = String(repeating: "x", count: 5_000)
+        XCTAssertEqual(PreviewText.joinedExcerpt([huge, "tail"]), PreviewText.excerpt(huge + "\ntail"))
+    }
+
     func testHighlightRangesMergeConsecutiveOffsets() {
         XCTAssertEqual(PreviewText.highlightRanges(in: "abcd", positions: [0, 1, 3]),
                        [NSRange(location: 0, length: 2), NSRange(location: 3, length: 1)])

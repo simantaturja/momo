@@ -2,7 +2,7 @@ import AppKit
 import ImageIO
 
 /// A downsampled image plus what the UI reports about the original: pixel size (read from
-/// the file header, not a full decode) and file size.
+/// the file header, not a full decode) and, for previews only, file size.
 final class LoadedImage {
     let image: NSImage
     let pixelWidth: Int
@@ -61,10 +61,13 @@ enum ImageLoader {
         ]
         guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
         let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any]
-        let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+        var byteSize: Int64?
+        if maxPixel > thumbnailPixels {   // only the preview's meta line shows the file size
+            byteSize = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int64
+        }
         return LoadedImage(image: NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height)),
                            pixelWidth: props?[kCGImagePropertyPixelWidth] as? Int ?? cg.width,
                            pixelHeight: props?[kCGImagePropertyPixelHeight] as? Int ?? cg.height,
-                           byteSize: attrs?[.size] as? Int64)
+                           byteSize: byteSize)
     }
 }

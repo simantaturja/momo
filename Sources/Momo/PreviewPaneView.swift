@@ -121,13 +121,19 @@ final class PreviewPaneView: NSView {
             metaLabel.stringValue = count(item.filePaths.count, "file")
         case .text, .richText:
             let full = item.text ?? item.preview
+            // Exact counts walk the whole text, so only when it fits the excerpt; a bigger clip
+            // gets its size instead (`utf8.count` is O(1) for a native string).
+            let fits = PreviewText.fitsExcerpt(full)
+            let size = ByteCountFormatter.string(fromByteCount: Int64(full.utf8.count), countStyle: .file)
             switch row.flavor {
             case .plain:
                 append(PreviewText.excerpt(full), .systemFont(ofSize: 13), to: text)
-                metaLabel.stringValue = "Text · \(count(PreviewText.lineCount(full), "line")) · \(count(full.count, "character"))"
+                metaLabel.stringValue = "Text · " + (fits
+                    ? "\(count(PreviewText.lineCount(full), "line")) · \(count(full.count, "character"))"
+                    : size)
             case .code:
                 append(PreviewText.excerpt(full), .monospacedSystemFont(ofSize: 12, weight: .regular), to: text)
-                metaLabel.stringValue = "Code · \(count(PreviewText.lineCount(full), "line"))"
+                metaLabel.stringValue = "Code · " + (fits ? count(PreviewText.lineCount(full), "line") : size)
             case .link:
                 let link = full.trimmingCharacters(in: .whitespacesAndNewlines)
                 let url = URL(string: link)
@@ -154,9 +160,9 @@ final class PreviewPaneView: NSView {
         append(count(rows.count, "item"), .systemFont(ofSize: 15, weight: .semibold), to: text)
         append("\n↵ copies them together", .systemFont(ofSize: 12), Theme.dimText, to: text)
         let clip = CombinedClip(rows.map(\.item))
-        if let joined = clip.text {
+        if !clip.texts.isEmpty {
             appendSection("TEXT", to: text)
-            append(PreviewText.excerpt(joined), .monospacedSystemFont(ofSize: 12, weight: .regular), to: text)
+            append(PreviewText.joinedExcerpt(clip.texts), .monospacedSystemFont(ofSize: 12, weight: .regular), to: text)
         }
         if !clip.filePaths.isEmpty {
             appendSection("FILES", to: text)
@@ -199,12 +205,16 @@ final class PreviewPaneView: NSView {
         swatchGap.constant = color == nil ? 0 : 12
     }
 
+    /// Name and folder per file, capped so a huge selection stays cheap to lay out.
     private func appendFiles(_ paths: [String], to text: NSMutableAttributedString) {
-        for (i, path) in paths.enumerated() {
+        for (i, path) in paths.prefix(Self.maxFiles).enumerated() {
             let name = (path as NSString).lastPathComponent
             let folder = ((path as NSString).deletingLastPathComponent as NSString).abbreviatingWithTildeInPath
             append((i == 0 ? "" : "\n") + name, .systemFont(ofSize: 13, weight: .semibold), to: text)
             append("\n" + folder, .systemFont(ofSize: 11), Theme.dimText, to: text)
+        }
+        if paths.count > Self.maxFiles {
+            append("\nand \(paths.count - Self.maxFiles) more", .systemFont(ofSize: 11), Theme.dimText, to: text)
         }
     }
 
@@ -223,4 +233,5 @@ final class PreviewPaneView: NSView {
     }
 
     private static let previewPixels = 600
+    private static let maxFiles = 50
 }

@@ -12,7 +12,7 @@ Native Swift + AppKit. No Electron. No lag. No telemetry.
 ![Platform](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange?logo=swift)
 ![UI](https://img.shields.io/badge/UI-AppKit-blue)
-![Tests](https://img.shields.io/badge/tests-81%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-88%20passing-brightgreen)
 
 </div>
 
@@ -159,12 +159,16 @@ Sources/
     ClipboardMonitor     changeCount poll → build item → emit
     HistoryIndex         in-memory list + fuzzy search/ranking
     FuzzyMatch           subsequence scorer
+    ContentFlavor        link / color / code detection + hex color values
+    PreviewText          one-line rows, excerpts, highlight ranges, line counts
     PrivacyFilter        concealed/transient gate
     PasteboardReading    protocol seam (real vs. fake pasteboard)
   Momo/                ← thin AppKit shell (side-effects only)
     AppCoordinator       wires everything together
     PanelController      the pre-warmed floating panel
     HistoryView / RowView  the table UI
+    PreviewPaneView      the selected item(s) in full, beside the list
+    ImageLoader          off-main, cached thumbnail + preview decoding
     HotkeyManager        Carbon global hotkey
     Paster               writes pasteboard + synthesizes ⌘V
 Tests/MomoCoreTests/   ← unit tests for the core
@@ -179,7 +183,7 @@ untestable-by-design adapters (menu bar, panel, hotkey, keystroke synthesis).
 ```sh
 swift build            # compile everything
 swift run Momo         # launch the app
-swift test             # run the MomoCore suite (81 tests)
+swift test             # run the MomoCore suite (88 tests)
 ```
 
 Core behavior is developed test-first — dedupe, pruning (count / byte-cap / age-out),

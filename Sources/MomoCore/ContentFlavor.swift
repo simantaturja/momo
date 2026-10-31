@@ -16,11 +16,16 @@ public enum ContentFlavor: Equatable, Sendable {
         return .plain
     }
 
-    private static func isLink(_ t: String) -> Bool {
-        let lower = t.lowercased()
-        guard lower.hasPrefix("http://") || lower.hasPrefix("https://"),
-              !t.contains(where: { $0.isWhitespace }),
-              let host = URL(string: t)?.host else { return false }
+    /// Whether `text` (surrounding whitespace allowed) is a lone http(s) URL with a host. Also
+    /// run on a clip's full, unbounded text, so only the scheme is lowercased and the scans stop
+    /// at the first whitespace and at the first non-whitespace after it.
+    static func isLink(_ text: String) -> Bool {
+        let t = text.drop(while: { $0.isWhitespace })
+        let scheme = t.prefix(8).lowercased()
+        guard scheme.hasPrefix("http://") || scheme.hasPrefix("https://") else { return false }
+        let end = t.firstIndex(where: { $0.isWhitespace }) ?? t.endIndex
+        guard t[end...].allSatisfy({ $0.isWhitespace }),
+              let host = URL(string: String(t[..<end]))?.host else { return false }
         return !host.isEmpty
     }
 

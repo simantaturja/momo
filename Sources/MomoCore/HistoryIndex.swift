@@ -28,8 +28,8 @@ public final class HistoryIndex {
         var item = item
         if let existing = rows.first(where: { $0.item.contentHash == item.contentHash })?.item {
             item = ClipboardItem(id: existing.id, kind: item.kind, preview: item.preview,
-                                  text: item.text, imagePath: item.imagePath, filePaths: item.filePaths,
-                                  createdAt: item.createdAt, pinned: item.pinned, contentHash: item.contentHash)
+                                  text: item.text, imagePath: existing.imagePath, filePaths: item.filePaths,
+                                  createdAt: item.createdAt, pinned: existing.pinned, contentHash: item.contentHash)
         }
         rows.removeAll { $0.item.contentHash == item.contentHash }
         rows.insert(Self.row(item), at: 0)
@@ -61,9 +61,17 @@ public final class HistoryIndex {
     }
 
     private static func row(_ item: ClipboardItem) -> HistoryRow {
-        HistoryRow(item: item, line: PreviewText.singleLine(item.preview),
-                   flavor: item.kind == .text ? ContentFlavor.detect(item.preview) : .plain,
+        HistoryRow(item: item, line: PreviewText.singleLine(item.preview), flavor: flavor(of: item),
                    matchedPositions: [])
+    }
+
+    /// Detected on the preview, which is only the first 200 characters, so a link is confirmed
+    /// against the full text: Open Link and the preview use all of it.
+    private static func flavor(of item: ClipboardItem) -> ContentFlavor {
+        guard item.kind == .text else { return .plain }
+        let flavor = ContentFlavor.detect(item.preview)
+        guard flavor == .link, let text = item.text else { return flavor }
+        return ContentFlavor.isLink(text) ? .link : .plain
     }
 }
 
