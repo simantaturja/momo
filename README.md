@@ -13,6 +13,7 @@ Native Swift + AppKit. No Electron. No lag. No telemetry.
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange?logo=swift)
 ![UI](https://img.shields.io/badge/UI-AppKit-blue)
 ![Tests](https://img.shields.io/badge/tests-103%20passing-brightgreen)
+![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
 </div>
 
@@ -215,7 +216,23 @@ in-memory store.
 - [ ] Throttle background pruning off the per-copy path
 - [ ] CI (`swift test` on push) + a formatter
 - [ ] Rich-text capture (the `.richText` kind is reserved but not yet produced)
-- [ ] A `LICENSE` (currently unlicensed — all rights reserved)
+- [x] A `LICENSE` (GPL-3.0-or-later)
+
+## License
+
+Copyright © 2026 Simanta Deb Turja
+
+Momo is free software: you can redistribute it and/or modify it under the terms of the
+[GNU General Public License](LICENSE) as published by the Free Software Foundation, either
+version 3 of the License, or (at your option) any later version. In short: use it, change it,
+share it — but a modified version you distribute must stay open source under the same license.
+
+Momo is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+[GNU General Public License](LICENSE) for more details.
+
+Versions up to and including 0.8.0 were released under the MIT License.
+Momo uses [GRDB.swift](https://github.com/groue/GRDB.swift), which is MIT-licensed.
 
 ---
 
