@@ -35,6 +35,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let login = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
         login.state = Settings.launchAtLogin ? .on : .off
         menu.addItem(login)
+        let passwords = NSMenuItem(title: "Save Passwords from Password Managers",
+                                   action: #selector(togglePasswords), keyEquivalent: "")
+        passwords.state = Settings.savePasswords ? .on : .off
+        passwords.toolTip = "When on, passwords you copy from 1Password and similar apps appear in your history. They're stored unencrypted on this Mac."
+        menu.addItem(passwords)
         menu.addItem(NSMenuItem(title: "Clear History…", action: #selector(clearHistory), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Momo", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
@@ -163,5 +168,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleLogin(_ sender: NSMenuItem) {
         Settings.launchAtLogin.toggle()
         sender.state = Settings.launchAtLogin ? .on : .off
+    }
+
+    @objc private func togglePasswords(_ sender: NSMenuItem) {
+        Settings.savePasswords.toggle()
+        sender.state = Settings.savePasswords ? .on : .off
     }
 }

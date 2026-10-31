@@ -45,6 +45,36 @@ final class ClipboardMonitorTests: XCTestCase {
         XCTAssertEqual(emissions, 0)
     }
 
+    func testConcealedEmittedWhenAllowed() {
+        let pb = FakePasteboard()
+        pb.changeCount = 1; pb.stringValue = "secret"; pb.types = ["org.nspasteboard.ConcealedType"]
+        let monitor = ClipboardMonitor(pasteboard: pb, writeImageBlob: { _ in "x.png" },
+                                       allowsConcealed: { true })
+        var captured: ClipboardItem?
+        monitor.onNewItem = { captured = $0 }
+        monitor.poll(now: Date())
+        XCTAssertEqual(captured?.text, "secret")
+    }
+
+    func testConcealedSettingTakesEffectWithoutRestart() {
+        // The setting is read on every capture, so flipping it applies to the very next copy.
+        let pb = FakePasteboard()
+        pb.types = ["org.nspasteboard.ConcealedType"]
+        var allowed = false
+        let monitor = ClipboardMonitor(pasteboard: pb, writeImageBlob: { _ in "x.png" },
+                                       allowsConcealed: { allowed })
+        var texts: [String?] = []
+        monitor.onNewItem = { texts.append($0.text) }
+
+        pb.stringValue = "first"; pb.changeCount = 1; monitor.poll(now: Date())    // off -> dropped
+        allowed = true
+        pb.stringValue = "second"; pb.changeCount = 2; monitor.poll(now: Date())   // on -> kept
+        allowed = false
+        pb.stringValue = "third"; pb.changeCount = 3; monitor.poll(now: Date())    // off again -> dropped
+
+        XCTAssertEqual(texts, ["second"])
+    }
+
     func testIdenticalImagesProduceEqualContentHash() {
         let pb = FakePasteboard()
         pb.imageBytes = Data([0x1, 0x2, 0x3, 0x4, 0x5])
