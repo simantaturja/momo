@@ -122,18 +122,18 @@ final class PreviewPaneView: NSView {
         case .text, .richText:
             let full = item.text ?? item.preview
             // Exact counts walk the whole text, so only when it fits the excerpt; a bigger clip
-            // gets its size instead (`utf8.count` is O(1) for a native string).
+            // gets its size instead, computed only then (`utf8.count` is O(1) for a native string).
             let fits = PreviewText.fitsExcerpt(full)
-            let size = ByteCountFormatter.string(fromByteCount: Int64(full.utf8.count), countStyle: .file)
+            let size = { ByteCountFormatter.string(fromByteCount: Int64(full.utf8.count), countStyle: .file) }
             switch row.flavor {
             case .plain:
                 append(PreviewText.excerpt(full), .systemFont(ofSize: 13), to: text)
                 metaLabel.stringValue = "Text · " + (fits
                     ? "\(count(PreviewText.lineCount(full), "line")) · \(count(full.count, "character"))"
-                    : size)
+                    : size())
             case .code:
                 append(PreviewText.excerpt(full), .monospacedSystemFont(ofSize: 12, weight: .regular), to: text)
-                metaLabel.stringValue = "Code · " + (fits ? count(PreviewText.lineCount(full), "line") : size)
+                metaLabel.stringValue = "Code · " + (fits ? count(PreviewText.lineCount(full), "line") : size())
             case .link:
                 let link = full.trimmingCharacters(in: .whitespacesAndNewlines)
                 let url = URL(string: link)

@@ -16,6 +16,7 @@ public struct CombinedClip {
     public init(_ items: [ClipboardItem]) {
         var texts: [String] = []
         var files: [String] = []
+        var seen = Set<String>()   // O(1) dedupe; a Finder copy can hold thousands of paths
         var images: [String] = []
         for item in items {
             switch item.kind {
@@ -24,7 +25,7 @@ public struct CombinedClip {
             case .image:
                 if let p = item.imagePath { images.append(p) }
             case .file:
-                for p in item.filePaths where !files.contains(p) { files.append(p) }
+                for p in item.filePaths where seen.insert(p).inserted { files.append(p) }
             }
         }
         self.texts = texts
