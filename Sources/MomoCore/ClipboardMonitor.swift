@@ -20,15 +20,22 @@ public final class ClipboardMonitor {
         self.sourceApp = sourceApp
     }
 
+    /// Pasteboard type Momo adds to its own copies, which are seen while focus goes back to another app.
+    public static let ownCopyType = "me.momo.app.own-copy"
+
     public func poll(now: Date) {
         let count = pasteboard.changeCount
         guard count != lastChangeCount else { return }
+        let sawTheCopy = lastChangeCount != nil   // what's on the clipboard at launch was copied unseen
         lastChangeCount = count
 
-        guard PrivacyFilter.shouldStore(pasteboardTypes: pasteboard.types,
+        let types = pasteboard.types
+        guard PrivacyFilter.shouldStore(pasteboardTypes: types,
                                         allowConcealed: allowsConcealed()) else { return }
+        // Asked before building the item: saving a big image takes a while, and the user may switch apps.
+        let source = sawTheCopy && !types.contains(Self.ownCopyType) ? sourceApp() : nil
         guard var item = buildItem(now: now) else { return }
-        item.sourceApp = sourceApp()
+        item.sourceApp = source
         onNewItem?(item)
     }
 

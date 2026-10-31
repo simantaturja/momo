@@ -145,6 +145,7 @@ final class ClipboardMonitorTests: XCTestCase {
                                        sourceApp: { frontmost })
         var captured: [ClipboardItem] = []
         monitor.onNewItem = { captured.append($0) }
+        monitor.poll(now: Date())   // launch: nothing on the clipboard yet
 
         pb.stringValue = "hello"; pb.changeCount = 1; monitor.poll(now: Date())
         frontmost = "Finder"
@@ -154,5 +155,48 @@ final class ClipboardMonitorTests: XCTestCase {
 
         XCTAssertEqual(captured.map(\.kind), [.text, .file, .image])
         XCTAssertEqual(captured.map(\.sourceApp), ["Safari", "Finder", nil])
+    }
+
+    func testCopyAlreadyOnTheClipboardAtLaunchIsCreditedToNoApp() {
+        // It was copied while Momo wasn't watching; the app in front at launch didn't make it.
+        let pb = FakePasteboard()
+        pb.stringValue = "from before launch"; pb.changeCount = 7
+        let monitor = ClipboardMonitor(pasteboard: pb, writeImageBlob: { _ in "x.png" },
+                                       sourceApp: { "Safari" })
+        var captured: [ClipboardItem] = []
+        monitor.onNewItem = { captured.append($0) }
+        monitor.poll(now: Date())
+        pb.stringValue = "seen"; pb.changeCount = 8; monitor.poll(now: Date())
+        XCTAssertEqual(captured.map(\.sourceApp), [nil, "Safari"])
+    }
+
+    func testMomosOwnCopiesAreCreditedToNoApp() {
+        // A re-copy or "Copy N" from the panel is seen while focus goes back to another app.
+        let pb = FakePasteboard()
+        let monitor = ClipboardMonitor(pasteboard: pb, writeImageBlob: { _ in "x.png" },
+                                       sourceApp: { "Safari" })
+        var captured: [ClipboardItem] = []
+        monitor.onNewItem = { captured.append($0) }
+        monitor.poll(now: Date())   // launch
+        pb.stringValue = "a\nb"; pb.changeCount = 1
+        pb.types = ["public.utf8-plain-text", ClipboardMonitor.ownCopyType]
+        monitor.poll(now: Date())
+        XCTAssertEqual(captured.map(\.text), ["a\nb"])   // still captured
+        XCTAssertEqual(captured.map(\.sourceApp), [nil])
+    }
+
+    func testSourceIsTheAppInFrontWhenTheCopyIsSeen() {
+        // Saving a big image takes a while; switching apps meanwhile mustn't change the credit.
+        let pb = FakePasteboard()
+        var frontmost = "Preview"
+        let monitor = ClipboardMonitor(pasteboard: pb, writeImageBlob: { _ in
+            frontmost = "Slack"
+            return "x.png"
+        }, sourceApp: { frontmost })
+        var captured: [ClipboardItem] = []
+        monitor.onNewItem = { captured.append($0) }
+        monitor.poll(now: Date())   // launch
+        pb.imageBytes = Data([0x1]); pb.changeCount = 1; monitor.poll(now: Date())
+        XCTAssertEqual(captured.map(\.sourceApp), ["Preview"])
     }
 }

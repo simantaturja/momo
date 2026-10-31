@@ -34,7 +34,10 @@ enum Paster {
         guard !objects.isEmpty else { return false }
         let pb = NSPasteboard.general
         pb.clearContents()
-        return pb.writeObjects(objects)
+        guard pb.writeObjects(objects) else { return false }
+        // Tag it as Momo's own so the monitor doesn't credit it to the app in front.
+        pb.setString("", forType: NSPasteboard.PasteboardType(ClipboardMonitor.ownCopyType))
+        return true
     }
 
     /// Synthesize Cmd+V into the frontmost app.

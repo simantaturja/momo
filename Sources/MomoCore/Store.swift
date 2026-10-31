@@ -41,8 +41,8 @@ public final class Store {
                                arguments: [item.createdAt.timeIntervalSince1970, existingId])
                 // Dedupe hit: the existing row keeps its own blob, so the just-written
                 // incoming image blob is redundant — reclaim it instead of orphaning it.
-                // It keeps its first-seen sourceApp too: a re-copy from Momo's own panel is
-                // captured with the wrong app in front.
+                // It keeps its first-seen sourceApp too, so a re-copy from Momo's panel
+                // (seen while focus goes back to another app) can't change it.
                 if item.kind == .image { removeBlob(item.imagePath) }
             } else {
                 try db.execute(sql: """
