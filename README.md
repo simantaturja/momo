@@ -103,7 +103,7 @@ with ⌘V yourself. (No Accessibility grant, no synthesized keystrokes.)
 | Anywhere | **⌘⇧V** or click 🥟 | Open / close the history dropdown |
 | Panel | *type* | Fuzzy-filter the history |
 | Panel | **↑ / ↓** | Move selection |
-| Panel | **⇧↑ / ⇧↓**, **⌘-click**, **⇧-click** | Select multiple items |
+| Panel | **⇧↑ / ⇧↓**, **⌘-click**, **⇧-click**, or click a row's **○** | Select multiple items (the footer then offers **Clear** / **Copy N**) |
 | Panel | **↵** | Copy the selected item(s) & close — then ⌘V in your app to paste |
 | Panel | hold **⌘**, then **1–9** | Quick-copy that row & close (rows show ⌘1–⌘9 while ⌘ is held) |
 | Panel | **⇥ / ⇧⇥** | Next / previous scope (All, Text, Links, Images, Files, Pinned) |

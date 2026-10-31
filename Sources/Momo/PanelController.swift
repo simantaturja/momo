@@ -83,7 +83,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         guard panel.isVisible else { return }
         panel.orderOut(nil)
         (content as? HistoryView)?.clearHover()
-        (content as? HistoryView)?.clearSearch()
+        (content as? HistoryView)?.resetForNextOpen()
         onVisibilityChange?(false)
     }
 

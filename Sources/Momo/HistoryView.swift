@@ -226,23 +226,23 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         let chipStack = NSStackView(views: scopeButtons)
         chipStack.spacing = 2
         chipStack.translatesAutoresizingMaskIntoConstraints = false
-        let hint = NSTextField(labelWithString: "⇥ next scope")
-        hint.font = .systemFont(ofSize: 11)
-        hint.textColor = Theme.dimText
-        hint.lineBreakMode = .byTruncatingTail
-        hint.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        hint.translatesAutoresizingMaskIntoConstraints = false
+        let scopeHint = NSTextField(labelWithString: "⇥ next scope")
+        scopeHint.font = .systemFont(ofSize: 11)
+        scopeHint.textColor = Theme.dimText
+        scopeHint.lineBreakMode = .byTruncatingTail
+        scopeHint.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        scopeHint.translatesAutoresizingMaskIntoConstraints = false
 
         let bar = NSView()
         bar.translatesAutoresizingMaskIntoConstraints = false
-        bar.addSubview(chipStack); bar.addSubview(hint)
+        bar.addSubview(chipStack); bar.addSubview(scopeHint)
         NSLayoutConstraint.activate([
             chipStack.leadingAnchor.constraint(equalTo: bar.leadingAnchor),
             chipStack.topAnchor.constraint(equalTo: bar.topAnchor),
             chipStack.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
-            hint.leadingAnchor.constraint(greaterThanOrEqualTo: chipStack.trailingAnchor, constant: 8),
-            hint.trailingAnchor.constraint(equalTo: bar.trailingAnchor),
-            hint.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
+            scopeHint.leadingAnchor.constraint(greaterThanOrEqualTo: chipStack.trailingAnchor, constant: 8),
+            scopeHint.trailingAnchor.constraint(equalTo: bar.trailingAnchor),
+            scopeHint.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
         ])
         updateScopeChips()
         return bar
@@ -322,13 +322,19 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         ])
     }
 
-    /// Called by `PanelController.show()`: every open starts on All, on the newest copy scrolled
-    /// to the top, with no quick keys. The query was already cleared on hide (`clearSearch`).
+    /// Called by `PanelController.show()`. Everything else was reset on hide (`resetForNextOpen`).
     func prepareForShow() {
-        if scope != .all { setScope(.all) }
-        selectNewest()
-        setQuickKeys(false)
         window?.makeFirstResponder(searchField)
+    }
+
+    /// Called by `PanelController.hide()`: the next open starts on All with no query and no quick
+    /// keys, on the newest copy scrolled to the top. Done on hide so opening is a pure reveal.
+    func resetForNextOpen() {
+        setQuickKeys(false)
+        searchField.stringValue = ""
+        if scope != .all { scope = .all; updateScopeChips() }
+        reload()   // the panel is hidden, so this lands on the newest row and builds its preview
+        selectNewest()
     }
 
     // MARK: Scopes
@@ -396,7 +402,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
 
     // MARK: Selection
 
-    /// Every open starts on the newest copy, scrolled to the top.
+    /// The newest copy, scrolled to the top: where every open starts.
     private func selectNewest() {
         guard !results.isEmpty else { return }
         tableView.selectRowIndexes([0], byExtendingSelection: false)
@@ -577,8 +583,8 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         if searchField.currentEditor() == nil { window?.makeFirstResponder(searchField) }
     }
 
-    /// The query never survives a hide, so the next open lists by recency again. Runs on hide, off the open path.
-    func clearSearch() {
+    /// Esc's first press: empties a non-empty query and lists by recency again.
+    private func clearSearch() {
         guard !searchField.stringValue.isEmpty else { return }
         searchField.stringValue = ""
         reload()
