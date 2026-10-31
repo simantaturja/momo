@@ -7,6 +7,8 @@ final class AppCoordinator {
     let monitor: ClipboardMonitor
     let imagesDir: String
     private var pollTimer: DispatchSourceTimer?
+    /// Called on main after a choice actually landed on the clipboard.
+    var onCopied: (() -> Void)?
     private let pollQueue = DispatchQueue(label: "momo.poll", qos: .utility)
 
     // MARK: Store location
@@ -119,7 +121,9 @@ final class AppCoordinator {
         let wrote = Paster.writeToPasteboard(items, imagesDir: imagesDir)
         panel.hide()
         panel.restorePreviousApp()
-        if !wrote {
+        if wrote {
+            onCopied?()
+        } else {
             NSLog("Momo: nothing to copy for \(items.count) item(s) (missing blob or empty payload)")
         }
     }

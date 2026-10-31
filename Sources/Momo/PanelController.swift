@@ -14,7 +14,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     init(contentView: NSView) {
         content = contentView
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 440, height: 460),
+            contentRect: NSRect(x: 0, y: 0, width: 680, height: 460),
             styleMask: [.nonactivatingPanel, .titled, .fullSizeContentView],
             backing: .buffered, defer: false)
         panel.titleVisibility = .hidden
@@ -75,9 +75,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         let ms = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
         NSLog("Momo open render: \(ms) ms")
         NSApp.activate(ignoringOtherApps: true)
-        (content as? HistoryView)?.resetFilter()
-        (content as? HistoryView)?.selectNewest()
-        (content as? HistoryView)?.focusSearch()
+        (content as? HistoryView)?.prepareForShow()
         onVisibilityChange?(true)
     }
 

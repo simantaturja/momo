@@ -1,16 +1,24 @@
 import AppKit
+import MomoCore
 
 /// Accent + role colors, defined once. `accent` is chili-oil red-orange and is used ONLY on
 /// the selection pill, the search focus ring, the selected row's icon tint, checked row
-/// checkboxes, the active filter icon, and the footer's selection count + Copy button.
-/// Everything else stays neutral so the panel reads clean. Colors are dynamic (light/dark) so they track
-/// the system appearance without any per-render work.
+/// checkboxes, and the footer's selection count + Copy button; its deeper `matchText` shade marks
+/// matched search letters. Everything else stays neutral so the panel reads clean. Colors are
+/// dynamic (light/dark) so they track the system appearance without any per-render work.
 enum Theme {
     /// #E8542B (light) / #FF6B43 (dark).
     static let accent = NSColor(name: nil) { appearance in
         appearance.isDark
             ? NSColor(srgbRed: 1.00, green: 0.420, blue: 0.263, alpha: 1)
             : NSColor(srgbRed: 0.910, green: 0.329, blue: 0.169, alpha: 1)
+    }
+
+    /// Matched letters in a search result: #C2401B (light) / #FF8B68 (dark).
+    static let matchText = NSColor(name: nil) { appearance in
+        appearance.isDark
+            ? NSColor(srgbRed: 1.00, green: 0.545, blue: 0.408, alpha: 1)
+            : NSColor(srgbRed: 0.761, green: 0.251, blue: 0.106, alpha: 1)
     }
 
     /// Soft accent fill for the selection pill (~18% alpha).
@@ -25,11 +33,19 @@ enum Theme {
     /// Neutral (unselected) badge symbol tint.
     static let badgeSymbol = NSColor.secondaryLabelColor
 
-    /// Dimmed right-aligned relative-time label, pin icon, and footer hint text.
+    /// Dimmed secondary text: relative times, the pin icon, hints, footer and preview meta, folders.
     static let dimText = NSColor.tertiaryLabelColor
 
     /// Fill behind the search capsule.
     static let searchFill = NSColor.quaternaryLabelColor
+}
+
+extension HexColor {
+    /// The color itself, for the badge and preview swatches.
+    var nsColor: NSColor {
+        NSColor(srgbRed: CGFloat(red) / 255, green: CGFloat(green) / 255,
+                blue: CGFloat(blue) / 255, alpha: CGFloat(alpha) / 255)
+    }
 }
 
 private extension NSAppearance {
