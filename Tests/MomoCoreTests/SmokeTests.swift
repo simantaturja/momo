@@ -3,6 +3,6 @@ import XCTest
 
 final class SmokeTests: XCTestCase {
     func testVersionExists() {
-        XCTAssertEqual(MomoCore.version, "0.6.0")
+        XCTAssertEqual(MomoCore.version, "0.7.0")
     }
 }
