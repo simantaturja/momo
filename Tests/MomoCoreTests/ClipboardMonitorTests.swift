@@ -56,6 +56,19 @@ final class ClipboardMonitorTests: XCTestCase {
         XCTAssertEqual(captured?.text, "secret")
     }
 
+    func testTransientNotEmittedEvenWhenConcealedAllowed() {
+        // The opt-in covers passwords only; a pasteboard also marked transient stays out.
+        let pb = FakePasteboard()
+        pb.changeCount = 1; pb.stringValue = "secret"
+        pb.types = ["org.nspasteboard.ConcealedType", "org.nspasteboard.TransientType"]
+        let monitor = ClipboardMonitor(pasteboard: pb, writeImageBlob: { _ in "x.png" },
+                                       allowsConcealed: { true })
+        var emissions = 0
+        monitor.onNewItem = { _ in emissions += 1 }
+        monitor.poll(now: Date())
+        XCTAssertEqual(emissions, 0)
+    }
+
     func testConcealedSettingTakesEffectWithoutRestart() {
         // The setting is read on every capture, so flipping it applies to the very next copy.
         let pb = FakePasteboard()
