@@ -16,10 +16,10 @@ private final class BadgeView: NSView {
         iconView.imageScaling = .scaleProportionallyDown
         addSubview(iconView)
         NSLayoutConstraint.activate([
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            iconView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-            iconView.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            iconView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 5),
+            iconView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5),
+            iconView.topAnchor.constraint(equalTo: topAnchor, constant: 5),
+            iconView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -5),
         ])
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -102,8 +102,8 @@ final class HistoryRowView: NSTableCellView {
             checkbox.heightAnchor.constraint(equalToConstant: 18),
             badge.leadingAnchor.constraint(equalTo: checkbox.trailingAnchor, constant: 8),
             badge.centerYAnchor.constraint(equalTo: centerYAnchor),
-            badge.widthAnchor.constraint(equalToConstant: 28),
-            badge.heightAnchor.constraint(equalToConstant: 28),
+            badge.widthAnchor.constraint(equalToConstant: 24),
+            badge.heightAnchor.constraint(equalToConstant: 24),
             label.leadingAnchor.constraint(equalTo: badge.trailingAnchor, constant: 12),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
             trailing.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: 8),
