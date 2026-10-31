@@ -4,9 +4,14 @@ import Foundation
 /// by newlines (in the order given), every file path (merged, duplicates dropped) and every
 /// image blob. The shell writes whatever is non-empty to the pasteboard.
 public struct CombinedClip {
-    public let text: String?
+    /// Every text item's text, in the order given.
+    public let texts: [String]
     public let filePaths: [String]
     public let imagePaths: [String]
+
+    /// `texts` joined by newlines, or nil if there are none. Joined on demand, so the preview
+    /// can show an excerpt without building the full copy.
+    public var text: String? { texts.isEmpty ? nil : texts.joined(separator: "\n") }
 
     public init(_ items: [ClipboardItem]) {
         var texts: [String] = []
@@ -22,7 +27,7 @@ public struct CombinedClip {
                 for p in item.filePaths where !files.contains(p) { files.append(p) }
             }
         }
-        text = texts.isEmpty ? nil : texts.joined(separator: "\n")
+        self.texts = texts
         filePaths = files
         imagePaths = images
     }

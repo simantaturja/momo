@@ -88,7 +88,11 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             guard let self, let window = self.window, event.window === window else { return event }
             let flags = event.modifierFlags
-            self.setQuickKeys(flags.contains(.command) && flags.isDisjoint(with: [.shift, .option, .control]))
+            let commandAlone = flags.contains(.command) && flags.isDisjoint(with: [.shift, .option, .control])
+            // Only pressing ⌘ itself (left 55 / right 54) shows them, so letting go of ⇧ after the
+            // ⌘⇧V hotkey doesn't flash them; any other modifier change can only hide them.
+            let isCommandKey = event.keyCode == 54 || event.keyCode == 55
+            self.setQuickKeys(commandAlone && (isCommandKey || self.quickKeys))
             return event
         }
     }
@@ -127,8 +131,11 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         col.resizingMask = .autoresizingMask
         tableView.addTableColumn(col)
         tableView.headerView = nil
-        tableView.rowHeight = 44
+        tableView.rowHeight = 38
         tableView.style = .plain
+        // No gap between rows: the pill inset already spaces them, and nine 38pt rows then fit
+        // the ~344pt list so every ⌘1–⌘9 row is visible.
+        tableView.intercellSpacing = NSSize(width: tableView.intercellSpacing.width, height: 0)
         tableView.backgroundColor = .clear
         tableView.allowsMultipleSelection = true
         tableView.dataSource = self
@@ -437,13 +444,14 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     /// Re-run the query and refresh the table. `preserveSelection` keeps the currently
     /// selected items selected across data-driven refreshes (a background capture must not
     /// yank the user's selection back to the top) and, if none survive (e.g. they were just
-    /// deleted), stays at the same position; search-driven reloads pass false so the best
-    /// match is highlighted. While the panel is hidden nothing is preserved: the next open
+    /// deleted), stays where the selection started; search-driven reloads pass false so the
+    /// best match is highlighted. While the panel is hidden nothing is preserved: the next open
     /// lands on the newest copy anyway, and selecting it now builds its preview off the open path.
     func reload(preserveSelection: Bool = false) {
         let start = DispatchTime.now()
         let preserve = preserveSelection && window?.isVisible == true
         let keep = preserve ? Set(selectedItems().map(\.id)) : []
+        let place = tableView.selectedRowIndexes.first
         results = index.search(searchField.stringValue, scope: scope)
         tableView.reloadData()
         let kept = IndexSet(results.indices.filter { keep.contains(results[$0].item.id) })
@@ -451,7 +459,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
             tableView.selectRowIndexes(kept, byExtendingSelection: false)
             anchorRow = first; cursorRow = last
         } else if !results.isEmpty {
-            let row = preserve ? min(min(anchorRow, cursorRow), results.count - 1) : 0
+            let row = preserve ? min(place ?? 0, results.count - 1) : 0
             tableView.selectRowIndexes([row], byExtendingSelection: false)
             anchorRow = row; cursorRow = row
         }

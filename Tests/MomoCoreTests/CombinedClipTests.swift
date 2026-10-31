@@ -37,6 +37,7 @@ final class CombinedClipTests: XCTestCase {
 
     func testMixedKindsKeepEveryPayload() {
         let clip = CombinedClip([text("y"), image("2.png"), file(["/f"]), image("1.png"), text("x")])
+        XCTAssertEqual(clip.texts, ["y", "x"])
         XCTAssertEqual(clip.text, "y\nx")
         XCTAssertEqual(clip.filePaths, ["/f"])
         XCTAssertEqual(clip.imagePaths, ["2.png", "1.png"])
@@ -44,6 +45,7 @@ final class CombinedClipTests: XCTestCase {
 
     func testItemsWithoutPayloadProduceEmptyClip() {
         for clip in [CombinedClip([text(nil), image(nil), file([])]), CombinedClip([])] {
+            XCTAssertEqual(clip.texts, [])
             XCTAssertNil(clip.text)
             XCTAssertEqual(clip.filePaths, [])
             XCTAssertEqual(clip.imagePaths, [])

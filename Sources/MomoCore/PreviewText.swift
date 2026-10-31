@@ -16,6 +16,27 @@ public enum PreviewText {
         return String(text[..<end]) + "…"
     }
 
+    /// Whether `excerpt` keeps all of `text` (at most `limit` Characters), i.e. exact counts
+    /// over it are cheap. Walks at most `limit` Characters.
+    public static func fitsExcerpt(_ text: String, limit: Int = 2_000) -> Bool {
+        guard let end = text.index(text.startIndex, offsetBy: limit, limitedBy: text.endIndex) else { return true }
+        return end == text.endIndex
+    }
+
+    /// `excerpt` of `texts` joined by newlines, without joining them in full: each text is cut
+    /// to just past the limit first and the rest are skipped once it's reached.
+    public static func joinedExcerpt(_ texts: [String], limit: Int = 2_000) -> String {
+        var pieces: [Substring] = []
+        var length = -1   // n pieces need n - 1 newlines
+        for text in texts {
+            guard length <= limit else { break }
+            let piece = text.prefix(limit + 1)   // one past the limit is enough to know it's cut
+            pieces.append(piece)
+            length += 1 + piece.count
+        }
+        return excerpt(pieces.joined(separator: "\n"), limit: limit)
+    }
+
     /// UTF-16 ranges (what attributed strings use) covering the given Character offsets of
     /// `text`, with consecutive offsets merged into one run. Offsets outside `text` are ignored.
     public static func highlightRanges(in text: String, positions: [Int]) -> [NSRange] {

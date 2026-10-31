@@ -66,6 +66,25 @@ final class HistoryIndexTests: XCTestCase {
         XCTAssertEqual(front.item.id, existing.id)
     }
 
+    func testPrependKeepsThePinOfTheItemItDedupes() {
+        let idx = HistoryIndex()
+        idx.replaceAll([item("a", at: 2, pinned: true), item("b", at: 1)])
+        idx.prepend(item("a", at: 3))   // a re-copy always arrives unpinned; Store.upsert keeps the pin
+        XCTAssertEqual(idx.search("").map(\.item.pinned), [true, false])
+        XCTAssertEqual(idx.search("", scope: .pinned).map(\.item.preview), ["a"])
+    }
+
+    func testPrependKeepsTheBlobOfTheImageItDedupes() {
+        let image = { (path: String, t: TimeInterval) in
+            ClipboardItem(kind: .image, preview: "Image", text: nil, imagePath: path, filePaths: [],
+                          createdAt: Date(timeIntervalSince1970: t), pinned: false, contentHash: "same-bytes")
+        }
+        let idx = HistoryIndex()
+        idx.replaceAll([image("stored.png", 1)])
+        idx.prepend(image("incoming.png", 2))   // Store.upsert deletes the incoming blob on this hit
+        XCTAssertEqual(idx.search("").map(\.item.imagePath), ["stored.png"])
+    }
+
     private func fileItem(_ paths: [String], at t: TimeInterval) -> ClipboardItem {
         ClipboardItem(kind: .file, preview: paths.joined(separator: ", "), text: nil, imagePath: nil,
                       filePaths: paths, createdAt: Date(timeIntervalSince1970: t), pinned: false,
@@ -100,10 +119,11 @@ final class HistoryIndexTests: XCTestCase {
         XCTAssertEqual(idx.search("git", scope: .text).map(\.item.preview), ["github.com", "gitlab"])
     }
 
-    func testSearchWithNoKindArgumentBehavesAsBefore() {
+    func testAllScopeReturnsEveryKind() {
         let idx = HistoryIndex()
-        idx.replaceAll([item("github.com", at: 3), item("gitlab", at: 2), item("banana", at: 1)])
-        XCTAssertEqual(idx.search("git"), idx.search("git", scope: .all))
+        idx.replaceAll([item("hello", at: 3), imageItem(at: 2), fileItem(["/a.pdf"], at: 1)])
+        XCTAssertEqual(idx.search("", scope: .all).map(\.item.kind), [.text, .image, .file])
+        XCTAssertEqual(idx.search("").map(\.item.kind), [.text, .image, .file])   // .all is the default
     }
 
     func testLinksScopeKeepsOnlyLinkText() {
@@ -142,6 +162,24 @@ final class HistoryIndexTests: XCTestCase {
         idx.prepend(item("{ }", at: 5))
         // A file whose name looks like a color stays plain: flavor is only detected for .text.
         XCTAssertEqual(idx.search("").map(\.flavor), [.code, .link, .color, .plain])
+    }
+
+    /// A text item as ClipboardMonitor builds it: the preview is the trimmed text's first 200 characters.
+    private func clip(_ text: String, at t: TimeInterval) -> ClipboardItem {
+        ClipboardItem(kind: .text, preview: String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)),
+                      text: text, imagePath: nil, filePaths: [], createdAt: Date(timeIntervalSince1970: t), pinned: false,
+                      contentHash: ClipboardItem.contentHash(kind: .text, text: text, imageHash: nil, filePaths: []))
+    }
+
+    func testLinkFlavorIsConfirmedAgainstTheFullText() {
+        let longURL = "https://example.com/" + String(repeating: "a", count: 200)   // 220 characters
+        let notALink = clip(longURL + " notes", at: 1)
+        XCTAssertEqual(ContentFlavor.detect(notALink.preview), .link)   // its 200-character preview alone looks like one
+        let idx = HistoryIndex()
+        idx.replaceAll([notALink])
+        idx.prepend(clip(longURL + "\n", at: 2))                        // a real long link stays a link
+        XCTAssertEqual(idx.search("").map(\.flavor), [.link, .plain])
+        XCTAssertEqual(idx.search("", scope: .links).map(\.item.text), [longURL + "\n"])
     }
 
     func testDistinctFileExtensionsEmptyWhenNoFileItems() {

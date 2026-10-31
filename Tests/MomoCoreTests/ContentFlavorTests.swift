@@ -20,6 +20,14 @@ final class ContentFlavorTests: XCTestCase {
         XCTAssertEqual(ContentFlavor.detect("see https://x.com"), .plain)    // not just a URL
     }
 
+    func testLinkCheckTakesUntrimmedFullText() {
+        XCTAssertTrue(ContentFlavor.isLink("  https://x.com/a \n"))   // surrounding whitespace is fine
+        XCTAssertTrue(ContentFlavor.isLink("HTTPS://X.COM"))
+        XCTAssertFalse(ContentFlavor.isLink("https://x.com notes"))
+        XCTAssertFalse(ContentFlavor.isLink("https://x.com\n\nmore"))
+        XCTAssertFalse(ContentFlavor.isLink("http:/x.com"))
+    }
+
     func testBracedTextIsCode() {
         XCTAssertEqual(ContentFlavor.detect("{\"a\": 1}"), .code)
     }
@@ -58,6 +66,17 @@ final class ContentFlavorTests: XCTestCase {
         XCTAssertEqual(translucent?.alpha, 68)
         XCTAssertEqual(translucent?.hex, "#11223344")
         XCTAssertEqual(HexColor("#112233FF")?.hex, "#112233")   // opaque alpha is dropped
+    }
+
+    func testHueForEachChannelBeingTheMax() {
+        // Pure channels: lightness (1 + 0) / 2 = 50%, saturation 1 / (1 - |2·0.5 - 1|) = 100%.
+        // #FF0080: (0 - 128/255) + 6 = 5.498 -> 329.9° -> 330. #FF0001: 5.996 -> 359.8° -> 360 -> 0.
+        for (hex, hue) in [("#00FF00", 120), ("#0000FF", 240), ("#FF0080", 330), ("#FF0001", 0)] {
+            let hsl = HexColor(hex)?.hsl
+            XCTAssertEqual(hsl?.hue, hue, hex)
+            XCTAssertEqual(hsl?.saturation, 100, hex)
+            XCTAssertEqual(hsl?.lightness, 50, hex)
+        }
     }
 
     func testGrayHasNoHueOrSaturation() {
