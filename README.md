@@ -12,7 +12,7 @@ Native Swift + AppKit. No Electron. No lag. No telemetry.
 ![Platform](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange?logo=swift)
 ![UI](https://img.shields.io/badge/UI-AppKit-blue)
-![Tests](https://img.shields.io/badge/tests-30%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-81%20passing-brightgreen)
 
 </div>
 
@@ -44,6 +44,11 @@ and filters faster than you can think.
   rebuilt. Opening is a reveal, not an assembly.
 - 🔎 **Instant fuzzy search** — filtering runs over an in-memory index; a keystroke never
   touches the disk. Subsequence matching ranks contiguous, early, and pinned matches first.
+- 🗂 **Scopes, highlights & a preview** — chips narrow the list to All, Text, Links, Images,
+  Files (optionally one extension) or Pinned; matched letters light up as you type; and a
+  preview pane beside the list shows the selection in full — text with line/character counts,
+  a link's host and path, a color's hex/RGB/HSL with a swatch, a larger image with its size,
+  or where a file lives.
 - 🧠 **Smart dedupe** — re-copy the same text, file, or image and it moves to the top
   instead of piling up a duplicate. Images dedupe by their actual bytes.
 - 🖼 **Images & files, handled well** — screenshots are stored as blobs on disk and shown
@@ -100,9 +105,12 @@ with ⌘V yourself. (No Accessibility grant, no synthesized keystrokes.)
 | Panel | **↑ / ↓** | Move selection |
 | Panel | **⇧↑ / ⇧↓**, **⌘-click**, **⇧-click** | Select multiple items |
 | Panel | **↵** | Copy the selected item(s) & close — then ⌘V in your app to paste |
+| Panel | hold **⌘**, then **1–9** | Quick-copy that row & close (rows show ⌘1–⌘9 while ⌘ is held) |
+| Panel | **⇥ / ⇧⇥** | Next / previous scope (All, Text, Links, Images, Files, Pinned) |
 | Panel | **⌘P** | Pin / unpin the selected item(s) |
 | Panel | **⌘⌫** | Delete the selected item(s) |
-| Panel | **Esc** | Dismiss (returns focus to your previous app) |
+| Panel | **Esc** | Clear the search; if it's already empty, dismiss (returns focus to your previous app) |
+| Panel | *right-click* a row | Copy, Pin / Unpin, Open Link, Reveal in Finder, Delete |
 
 > If another app already owns ⌘⇧V, Momo tells you and you can always open it by clicking
 > the menu-bar icon.
@@ -171,7 +179,7 @@ untestable-by-design adapters (menu bar, panel, hotkey, keystroke synthesis).
 ```sh
 swift build            # compile everything
 swift run Momo         # launch the app
-swift test             # run the MomoCore suite (30 tests)
+swift test             # run the MomoCore suite (81 tests)
 ```
 
 Core behavior is developed test-first — dedupe, pruning (count / byte-cap / age-out),

@@ -6,6 +6,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let menu = NSMenu()
     var coordinator: AppCoordinator!
     private var hotkey: HotkeyManager!
+    private let dumplingIcon = AppDelegate.momoIcon()
+    private var restoreIcon: DispatchWorkItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let coordinator = makeCoordinator() else { NSApp.terminate(nil); return }
@@ -20,7 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !hotkey.register() { warnHotkeyRegistrationFailed() }
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.image = Self.momoIcon()
+        statusItem.button?.image = dumplingIcon
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusItemClicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -28,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         coordinator.panel.onVisibilityChange = { [weak self] visible in
             self?.statusItem.button?.highlight(visible)
         }
+        coordinator.onCopied = { [weak self] in self?.flashCopied() }
 
         let login = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
         login.state = Settings.launchAtLogin ? .on : .off
@@ -71,6 +74,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             coordinator.panel.toggle()
         }
+    }
+
+    /// Confirms a copy by showing a checkmark in the menu bar for a moment. Each copy restarts
+    /// the timer, so rapid copies don't restore the dumpling early.
+    private func flashCopied() {
+        restoreIcon?.cancel()
+        let check = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Copied")
+        check?.isTemplate = true
+        statusItem.button?.image = check
+        let restore = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.statusItem.button?.image = self.dumplingIcon
+        }
+        restoreIcon = restore
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: restore)
     }
 
     @objc private func clearHistory() {

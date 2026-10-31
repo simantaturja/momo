@@ -47,21 +47,30 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     private let searchField = FocusRingSearchField()
     private let capsule = SearchCapsule()
     private let tableView = NSTableView()
+    private let preview = PreviewPaneView()
     private let emptyEmoji = NSTextField(labelWithString: "🥟")
     private let emptyTitle = NSTextField(labelWithString: "")
     private let emptySubtitle = NSTextField(labelWithString: "")
     private let emptyStack = NSStackView()
-    private var results: [ClipboardItem] = []
-    private var selectedKind: ItemKind?
-    private var selectedFileExtension: String?
-    private let filterButton = NSButton()
-    private let selectionCount = NSTextField(labelWithString: "")
-    private let hint = NSTextField(labelWithString: "↵ copy · click ○ or ⇧↑↓ to select more · ⌘P pin · ⌘⌫ delete")
+    private var results: [HistoryRow] = []
+    private var scope: HistoryScope = .all
+    private var scopeButtons: [NSButton] = []
+    private let countLabel = NSTextField(labelWithString: "")
+    private let hint = NSTextField(labelWithString: "↵ Copy   ⌘1–9 Quick copy   ○ or ⇧↑↓ Select more   ⌘P Pin   ⌘⌫ Delete")
     private let actionBar = NSStackView()
     private let copyButton = NSButton()
+    // Holding ⌘ alone swaps the first nine rows' times for their ⌘1…⌘9 quick keys.
+    private var quickKeys = false
+    private var flagsMonitor: Any?
     // Keyboard range selection: ⇧↑/⇧↓ moves `cursorRow` and selects everything back to `anchorRow`.
     private var anchorRow = 0
     private var cursorRow = 0
+
+    /// Scope chips in display (and ⇥) order. The Files chip stands for every `.files(extension:)`.
+    private static let chips: [(title: String, scope: HistoryScope)] = [
+        ("All", .all), ("Text", .text), ("Links", .links),
+        ("Images", .images), ("Files", .files(extension: nil)), ("Pinned", .pinned),
+    ]
 
     init(index: HistoryIndex, imagesDir: String,
          onChoose: @escaping ([ClipboardItem]) -> Void,
@@ -74,6 +83,14 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         super.init(frame: .zero)
         buildUI()
         reload()
+        // HistoryView lives as long as the app (the panel is never torn down), so this
+        // monitor is never removed.
+        flagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            guard let self, let window = self.window, event.window === window else { return event }
+            let flags = event.modifierFlags
+            self.setQuickKeys(flags.contains(.command) && flags.isDisjoint(with: [.shift, .option, .control]))
+            return event
+        }
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -94,28 +111,15 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         magnifier.contentTintColor = Theme.badgeSymbol
         magnifier.translatesAutoresizingMaskIntoConstraints = false
 
-        filterButton.translatesAutoresizingMaskIntoConstraints = false
-        filterButton.bezelStyle = .regularSquare
-        filterButton.isBordered = false
-        filterButton.imagePosition = .imageOnly
-        filterButton.image = NSImage(systemSymbolName: "line.3.horizontal.decrease.circle", accessibilityDescription: nil)
-        filterButton.contentTintColor = Theme.badgeSymbol
-        filterButton.target = self
-        filterButton.action = #selector(showFilterMenu)
-
         capsule.translatesAutoresizingMaskIntoConstraints = false
-        capsule.addSubview(magnifier); capsule.addSubview(searchField); capsule.addSubview(filterButton)
+        capsule.addSubview(magnifier); capsule.addSubview(searchField)
         NSLayoutConstraint.activate([
             magnifier.leadingAnchor.constraint(equalTo: capsule.leadingAnchor, constant: 14),
             magnifier.centerYAnchor.constraint(equalTo: capsule.centerYAnchor),
             magnifier.widthAnchor.constraint(equalToConstant: 16),
             magnifier.heightAnchor.constraint(equalToConstant: 16),
-            filterButton.trailingAnchor.constraint(equalTo: capsule.trailingAnchor, constant: -10),
-            filterButton.centerYAnchor.constraint(equalTo: capsule.centerYAnchor),
-            filterButton.widthAnchor.constraint(equalToConstant: 18),
-            filterButton.heightAnchor.constraint(equalToConstant: 18),
             searchField.leadingAnchor.constraint(equalTo: magnifier.trailingAnchor, constant: 8),
-            searchField.trailingAnchor.constraint(equalTo: filterButton.leadingAnchor, constant: -6),
+            searchField.trailingAnchor.constraint(equalTo: capsule.trailingAnchor, constant: -12),
             searchField.centerYAnchor.constraint(equalTo: capsule.centerYAnchor),
         ])
 
@@ -132,8 +136,9 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         tableView.target = self
         tableView.action = #selector(rowClicked)
         tableView.doubleAction = #selector(chooseSelected)
-        tableView.menu = NSMenu()
-        tableView.menu?.delegate = self
+        let contextMenu = NSMenu()
+        contextMenu.delegate = self   // filled per click in menuNeedsUpdate
+        tableView.menu = contextMenu
 
         let scroll = NSScrollView()
         scroll.documentView = tableView
@@ -141,25 +146,55 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         scroll.drawsBackground = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
 
+        let scopeBar = buildScopeBar()
+        let topSeparator = NSBox()
+        topSeparator.boxType = .separator
+        topSeparator.translatesAutoresizingMaskIntoConstraints = false
+        let divider = NSBox()   // vertical, between the list and the preview
+        divider.boxType = .separator
+        divider.translatesAutoresizingMaskIntoConstraints = false
+        preview.translatesAutoresizingMaskIntoConstraints = false
+
         buildEmptyState()
         let footer = buildFooter()
 
-        addSubview(capsule); addSubview(scroll); addSubview(emptyStack); addSubview(footer)
+        for view in [capsule, scopeBar, topSeparator, scroll, divider, preview, emptyStack, footer] as [NSView] {
+            addSubview(view)
+        }
         NSLayoutConstraint.activate([
             capsule.topAnchor.constraint(equalTo: topAnchor, constant: 12),
             capsule.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             capsule.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             capsule.heightAnchor.constraint(equalToConstant: 40),
 
-            scroll.topAnchor.constraint(equalTo: capsule.bottomAnchor, constant: 8),
+            scopeBar.topAnchor.constraint(equalTo: capsule.bottomAnchor, constant: 8),
+            scopeBar.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            scopeBar.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+
+            topSeparator.topAnchor.constraint(equalTo: scopeBar.bottomAnchor, constant: 8),
+            topSeparator.leadingAnchor.constraint(equalTo: leadingAnchor),
+            topSeparator.trailingAnchor.constraint(equalTo: trailingAnchor),
+            topSeparator.heightAnchor.constraint(equalToConstant: 1),
+
+            scroll.topAnchor.constraint(equalTo: topSeparator.bottomAnchor),
             scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scroll.widthAnchor.constraint(equalToConstant: 330),
             scroll.bottomAnchor.constraint(equalTo: footer.topAnchor),
+
+            divider.topAnchor.constraint(equalTo: topSeparator.bottomAnchor),
+            divider.leadingAnchor.constraint(equalTo: scroll.trailingAnchor),
+            divider.widthAnchor.constraint(equalToConstant: 1),
+            divider.bottomAnchor.constraint(equalTo: footer.topAnchor),
+
+            preview.topAnchor.constraint(equalTo: topSeparator.bottomAnchor),
+            preview.leadingAnchor.constraint(equalTo: divider.trailingAnchor),
+            preview.trailingAnchor.constraint(equalTo: trailingAnchor),
+            preview.bottomAnchor.constraint(equalTo: footer.topAnchor),
 
             emptyStack.centerXAnchor.constraint(equalTo: scroll.centerXAnchor),
             emptyStack.centerYAnchor.constraint(equalTo: scroll.centerYAnchor),
-            emptyStack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 24),
-            emptyStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -24),
+            emptyStack.leadingAnchor.constraint(greaterThanOrEqualTo: scroll.leadingAnchor, constant: 24),
+            emptyStack.trailingAnchor.constraint(lessThanOrEqualTo: scroll.trailingAnchor, constant: -24),
 
             footer.leadingAnchor.constraint(equalTo: leadingAnchor),
             footer.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -168,12 +203,51 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         ])
     }
 
+    /// The scope chips plus a dim "⇥ next scope" hint at the right end.
+    private func buildScopeBar() -> NSView {
+        for (i, chip) in Self.chips.enumerated() {
+            let button = NSButton(title: chip.title, target: self, action: #selector(scopeClicked(_:)))
+            button.bezelStyle = .recessed
+            button.setButtonType(.pushOnPushOff)
+            button.showsBorderOnlyWhileMouseInside = true
+            button.controlSize = .small
+            button.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            button.refusesFirstResponder = true
+            button.tag = i
+            scopeButtons.append(button)
+        }
+        let chipStack = NSStackView(views: scopeButtons)
+        chipStack.spacing = 2
+        chipStack.translatesAutoresizingMaskIntoConstraints = false
+        let hint = NSTextField(labelWithString: "⇥ next scope")
+        hint.font = .systemFont(ofSize: 11)
+        hint.textColor = Theme.dimText
+        hint.lineBreakMode = .byTruncatingTail
+        hint.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        hint.translatesAutoresizingMaskIntoConstraints = false
+
+        let bar = NSView()
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        bar.addSubview(chipStack); bar.addSubview(hint)
+        NSLayoutConstraint.activate([
+            chipStack.leadingAnchor.constraint(equalTo: bar.leadingAnchor),
+            chipStack.topAnchor.constraint(equalTo: bar.topAnchor),
+            chipStack.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
+            hint.leadingAnchor.constraint(greaterThanOrEqualTo: chipStack.trailingAnchor, constant: 8),
+            hint.trailingAnchor.constraint(equalTo: bar.trailingAnchor),
+            hint.centerYAnchor.constraint(equalTo: bar.centerYAnchor),
+        ])
+        updateScopeChips()
+        return bar
+    }
+
     private func buildEmptyState() {
         emptyEmoji.font = .systemFont(ofSize: 44)
         emptyEmoji.alignment = .center
         emptyTitle.font = .systemFont(ofSize: 15, weight: .medium)
         emptyTitle.textColor = .secondaryLabelColor
         emptyTitle.alignment = .center
+        emptyTitle.lineBreakMode = .byTruncatingTail   // a long query must fit the 330pt list
         emptySubtitle.font = .systemFont(ofSize: 13)
         emptySubtitle.textColor = Theme.dimText
         emptySubtitle.alignment = .center
@@ -195,13 +269,12 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         separator.translatesAutoresizingMaskIntoConstraints = false
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = Theme.dimText
+        hint.alignment = .right
         hint.lineBreakMode = .byTruncatingTail
         hint.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         hint.translatesAutoresizingMaskIntoConstraints = false
-        selectionCount.font = .systemFont(ofSize: 11, weight: .medium)
-        selectionCount.textColor = Theme.accent
-        selectionCount.translatesAutoresizingMaskIntoConstraints = false
-        selectionCount.isHidden = true
+        countLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        countLabel.translatesAutoresizingMaskIntoConstraints = false
 
         // Shown instead of the hint while ≥2 rows are selected.
         let clearButton = NSButton()
@@ -212,17 +285,17 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         actionBar.translatesAutoresizingMaskIntoConstraints = false
         actionBar.isHidden = true
 
-        footer.addSubview(separator); footer.addSubview(hint); footer.addSubview(selectionCount); footer.addSubview(actionBar)
+        footer.addSubview(separator); footer.addSubview(countLabel); footer.addSubview(hint); footer.addSubview(actionBar)
         NSLayoutConstraint.activate([
             separator.topAnchor.constraint(equalTo: footer.topAnchor),
             separator.leadingAnchor.constraint(equalTo: footer.leadingAnchor),
             separator.trailingAnchor.constraint(equalTo: footer.trailingAnchor),
-            hint.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 12),
-            hint.trailingAnchor.constraint(lessThanOrEqualTo: footer.trailingAnchor, constant: -12),
+            countLabel.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 12),
+            countLabel.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
+            hint.leadingAnchor.constraint(greaterThanOrEqualTo: countLabel.trailingAnchor, constant: 12),
+            hint.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -12),
             hint.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
-            selectionCount.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: 12),
-            selectionCount.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
-            actionBar.leadingAnchor.constraint(greaterThanOrEqualTo: selectionCount.trailingAnchor, constant: 8),
+            actionBar.leadingAnchor.constraint(greaterThanOrEqualTo: countLabel.trailingAnchor, constant: 8),
             actionBar.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -12),
             actionBar.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
         ])
@@ -242,89 +315,82 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         ])
     }
 
-    func focusSearch() { window?.makeFirstResponder(searchField) }
+    /// Called by `PanelController.show()`: every open starts on All, on the newest copy scrolled
+    /// to the top, with no quick keys. The query was already cleared on hide (`clearSearch`).
+    func prepareForShow() {
+        if scope != .all { setScope(.all) }
+        selectNewest()
+        setQuickKeys(false)
+        window?.makeFirstResponder(searchField)
+    }
 
-    @objc private func showFilterMenu(_ sender: NSButton) {
-        let menu = NSMenu()
+    // MARK: Scopes
 
-        let all = NSMenuItem(title: "All", action: #selector(selectFilterAll), keyEquivalent: "")
-        all.target = self
-        all.state = selectedKind == nil ? .on : .off
-        menu.addItem(all)
-
-        let text = NSMenuItem(title: "Text", action: #selector(selectFilterText), keyEquivalent: "")
-        text.target = self
-        text.state = (selectedKind == .text) ? .on : .off
-        menu.addItem(text)
-
-        let image = NSMenuItem(title: "Image", action: #selector(selectFilterImage), keyEquivalent: "")
-        image.target = self
-        image.state = (selectedKind == .image) ? .on : .off
-        menu.addItem(image)
-
-        let fileItem = NSMenuItem(title: "File", action: nil, keyEquivalent: "")
-        let extensions = index.distinctFileExtensions()
-        if extensions.isEmpty {
-            fileItem.action = #selector(selectFilterAnyFile)
-            fileItem.target = self
-            fileItem.state = (selectedKind == .file) ? .on : .off
-        } else {
-            let submenu = NSMenu()
-            let anyFile = NSMenuItem(title: "All Files", action: #selector(selectFilterAnyFile), keyEquivalent: "")
-            anyFile.target = self
-            anyFile.state = (selectedKind == .file && selectedFileExtension == nil) ? .on : .off
-            submenu.addItem(anyFile)
-            submenu.addItem(.separator())
-            for ext in extensions {
-                let extItem = NSMenuItem(title: ".\(ext)", action: #selector(selectFilterFileExtension(_:)), keyEquivalent: "")
-                extItem.target = self
-                extItem.representedObject = ext
-                extItem.state = (selectedKind == .file && selectedFileExtension == ext) ? .on : .off
-                submenu.addItem(extItem)
-            }
-            fileItem.submenu = submenu
+    @objc private func scopeClicked(_ sender: NSButton) {
+        let chosen = Self.chips[sender.tag].scope
+        if case .files = chosen, case .files = scope, !index.distinctFileExtensions().isEmpty {
+            showFileExtensionMenu(from: sender)
+        } else if chosen != scope {
+            setScope(chosen)
         }
-        menu.addItem(fileItem)
+        updateScopeChips()   // the click toggled the push-on-push-off chip itself; re-sync
+        focusSearchKeepingText()
+    }
 
+    private func showFileExtensionMenu(from sender: NSButton) {
+        let menu = NSMenu()
+        let anyFile = NSMenuItem(title: "All Files", action: #selector(selectFileExtension(_:)), keyEquivalent: "")
+        anyFile.target = self
+        anyFile.state = scope == .files(extension: nil) ? .on : .off
+        menu.addItem(anyFile)
+        menu.addItem(.separator())
+        for ext in index.distinctFileExtensions() {
+            let extItem = NSMenuItem(title: ".\(ext)", action: #selector(selectFileExtension(_:)), keyEquivalent: "")
+            extItem.target = self
+            extItem.representedObject = ext
+            extItem.state = scope == .files(extension: ext) ? .on : .off
+            menu.addItem(extItem)
+        }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
     }
 
-    @objc private func selectFilterAll() { applyFilter(kind: nil, fileExtension: nil) }
-    @objc private func selectFilterText() { applyFilter(kind: .text, fileExtension: nil) }
-    @objc private func selectFilterImage() { applyFilter(kind: .image, fileExtension: nil) }
-    @objc private func selectFilterAnyFile() { applyFilter(kind: .file, fileExtension: nil) }
-
-    @objc private func selectFilterFileExtension(_ sender: NSMenuItem) {
-        guard let ext = sender.representedObject as? String else { return }
-        applyFilter(kind: .file, fileExtension: ext)
+    @objc private func selectFileExtension(_ sender: NSMenuItem) {
+        setScope(.files(extension: sender.representedObject as? String))
     }
 
-    private func applyFilter(kind: ItemKind?, fileExtension: String?) {
-        selectedKind = kind
-        selectedFileExtension = fileExtension
-        updateFilterButtonAppearance()
+    private func setScope(_ newScope: HistoryScope) {
+        scope = newScope
+        updateScopeChips()
         reload()
     }
 
-    private func updateFilterButtonAppearance() {
-        let active = selectedKind != nil
-        let symbolName = active ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle"
-        filterButton.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
-        filterButton.contentTintColor = active ? Theme.accent : Theme.badgeSymbol
+    /// Exactly the active chip is on; the Files chip names a chosen extension.
+    private func updateScopeChips() {
+        let active = Self.chipIndex(of: scope)
+        for (i, button) in scopeButtons.enumerated() {
+            button.state = i == active ? .on : .off
+            button.title = Self.chips[i].title
+        }
+        if case .files(let ext?) = scope { scopeButtons[active].title = "Files: .\(ext)" }
     }
 
-    /// Clears the type filter. Called by `PanelController.show()` so the filter never
-    /// survives a close/reopen (text search intentionally does persist — unrelated behavior).
-    func resetFilter() {
-        guard selectedKind != nil || selectedFileExtension != nil else { return }
-        selectedKind = nil
-        selectedFileExtension = nil
-        updateFilterButtonAppearance()
-        reload()
+    /// ⇥ / ⇧⇥ step through the chips, wrapping around.
+    private func cycleScope(_ step: Int) {
+        let n = Self.chips.count
+        setScope(Self.chips[(Self.chipIndex(of: scope) + step + n) % n].scope)
     }
 
-    /// Every open starts on the newest copy, scrolled to the top. Called by `PanelController.show()`.
-    func selectNewest() {
+    /// The chip a scope belongs to; every file extension belongs to Files.
+    private static func chipIndex(of scope: HistoryScope) -> Int {
+        var chipScope = scope
+        if case .files = scope { chipScope = .files(extension: nil) }
+        return chips.firstIndex { $0.scope == chipScope } ?? 0
+    }
+
+    // MARK: Selection
+
+    /// Every open starts on the newest copy, scrolled to the top.
+    private func selectNewest() {
         guard !results.isEmpty else { return }
         tableView.selectRowIndexes([0], byExtendingSelection: false)
         tableView.scrollRowToVisible(0)
@@ -332,7 +398,8 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.modifierFlags.contains(.command) {
+        let flags = event.modifierFlags
+        if flags.contains(.command) {
             let items = selectedItems()
             if event.charactersIgnoringModifiers == "p", !items.isEmpty {
                 onPinToggle(items); return true
@@ -340,33 +407,58 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
             if event.keyCode == 51, !items.isEmpty {   // ⌘⌫ deletes the selected items
                 onDelete(items); return true
             }
+            // ⌘1…⌘9 (⌘ alone) copies that row straight away.
+            if flags.isDisjoint(with: [.shift, .option, .control]),
+               let n = event.charactersIgnoringModifiers.flatMap({ Int($0) }),
+               (1...9).contains(n), n <= results.count {
+                onChoose([results[n - 1].item]); return true
+            }
         }
         return super.performKeyEquivalent(with: event)
     }
 
-    /// Selected items in display order (top to bottom) — also the order they're copied in.
-    private func selectedItems() -> [ClipboardItem] {
+    private func setQuickKeys(_ on: Bool) {
+        guard on != quickKeys else { return }
+        quickKeys = on
+        tableView.enumerateAvailableRowViews { rowView, _ in
+            (rowView.view(atColumn: 0) as? HistoryRowView)?.setQuickKey(on)
+        }
+    }
+
+    /// Selected rows in display order (top to bottom) — also the order they're copied in.
+    private func selectedRows() -> [HistoryRow] {
         tableView.selectedRowIndexes.filter { $0 < results.count }.map { results[$0] }
+    }
+
+    private func selectedItems() -> [ClipboardItem] {
+        selectedRows().map(\.item)
     }
 
     /// Re-run the query and refresh the table. `preserveSelection` keeps the currently
     /// selected items selected across data-driven refreshes (a background capture must not
-    /// yank the user's selection back to the top); search-driven reloads pass false so the
-    /// best match is highlighted.
+    /// yank the user's selection back to the top) and, if none survive (e.g. they were just
+    /// deleted), stays at the same position; search-driven reloads pass false so the best
+    /// match is highlighted. While the panel is hidden nothing is preserved: the next open
+    /// lands on the newest copy anyway, and selecting it now builds its preview off the open path.
     func reload(preserveSelection: Bool = false) {
         let start = DispatchTime.now()
-        let keep = preserveSelection ? Set(selectedItems().map(\.id)) : []
-        results = index.search(searchField.stringValue, kind: selectedKind, fileExtension: selectedFileExtension)
+        let preserve = preserveSelection && window?.isVisible == true
+        let keep = preserve ? Set(selectedItems().map(\.id)) : []
+        results = index.search(searchField.stringValue, scope: scope)
         tableView.reloadData()
-        let kept = IndexSet(results.indices.filter { keep.contains(results[$0].id) })
+        let kept = IndexSet(results.indices.filter { keep.contains(results[$0].item.id) })
         if let first = kept.first, let last = kept.last {
             tableView.selectRowIndexes(kept, byExtendingSelection: false)
             anchorRow = first; cursorRow = last
         } else if !results.isEmpty {
-            tableView.selectRowIndexes([0], byExtendingSelection: false)
-            anchorRow = 0; cursorRow = 0
+            let row = preserve ? min(min(anchorRow, cursorRow), results.count - 1) : 0
+            tableView.selectRowIndexes([row], byExtendingSelection: false)
+            anchorRow = row; cursorRow = row
         }
         updateEmptyState()
+        // The selected indexes can stay the same while the items under them change, so
+        // selectionDidChange alone would leave a stale preview.
+        refreshDetail()
         let ms = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000
         if ms > 16 { NSLog("Momo search+render slow: \(ms) ms for \(results.count)") }
     }
@@ -374,23 +466,48 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     private func updateEmptyState() {
         guard results.isEmpty else { emptyStack.isHidden = true; return }
         let query = searchField.stringValue
-        if query.isEmpty {
+        if !query.isEmpty {
+            emptyEmoji.isHidden = true
+            emptySubtitle.isHidden = true
+            emptyTitle.stringValue = "No matches for \"\(query)\""
+        } else if scope == .all {
             emptyEmoji.isHidden = false
             emptySubtitle.isHidden = false
             emptyTitle.stringValue = "Nothing copied yet"
             emptySubtitle.stringValue = "Copy anything — it'll show up here."
         } else {
-            emptyEmoji.isHidden = true
+            emptyEmoji.isHidden = false
             emptySubtitle.isHidden = true
-            emptyTitle.stringValue = "No matches for \"\(query)\""
+            emptyTitle.stringValue = "No \(Self.chips[Self.chipIndex(of: scope)].title.lowercased()) yet"
         }
         emptyStack.isHidden = false
+    }
+
+    /// Preview pane + footer count for the current selection.
+    private func refreshDetail() {
+        let rows = selectedRows()
+        preview.show(rows, imagesDir: imagesDir)
+        let n = results.count
+        // While several rows are selected, Clear / Copy N replace the key hints.
+        let multi = rows.count > 1
+        hint.isHidden = multi
+        actionBar.isHidden = !multi
+        if multi {
+            countLabel.stringValue = "\(rows.count) selected"
+            countLabel.textColor = Theme.accent
+            copyButton.attributedTitle = footerTitle("Copy \(rows.count)", color: Theme.accent)
+        } else {
+            countLabel.stringValue = searchField.stringValue.isEmpty
+                ? (n == 1 ? "1 item" : "\(n) items")
+                : (n == 1 ? "1 match" : "\(n) matches")
+            countLabel.textColor = Theme.dimText
+        }
     }
 
     // Search typing
     func controlTextDidChange(_ obj: Notification) { reload() }
 
-    // Enter / arrows from the search field
+    // Enter / arrows / tab / esc from the search field
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {
         case #selector(NSResponder.insertNewline(_:)): chooseSelected(); return true
@@ -398,9 +515,16 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         case #selector(NSResponder.moveUp(_:)): moveSelection(-1); return true
         case #selector(NSResponder.moveDownAndModifySelection(_:)): moveSelection(+1, extending: true); return true
         case #selector(NSResponder.moveUpAndModifySelection(_:)): moveSelection(-1, extending: true); return true
-        case #selector(NSResponder.cancelOperation(_:)): onCancel(); return true
+        case #selector(NSResponder.insertTab(_:)): cycleScope(+1); return true
+        case #selector(NSResponder.insertBacktab(_:)): cycleScope(-1); return true
+        case #selector(NSResponder.cancelOperation(_:)): clearSearchOrCancel(); return true
         default: return false
         }
+    }
+
+    /// Esc clears a non-empty search first; on an empty one it closes the panel.
+    private func clearSearchOrCancel() {
+        if searchField.stringValue.isEmpty { onCancel() } else { clearSearch() }
     }
 
     /// ↑/↓ collapse to a single row; ⇧↑/⇧↓ (`extending`) grow or shrink a range from the anchor.
@@ -477,44 +601,60 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
-        let n = tableView.selectedRowIndexes.count
-        let multi = n > 1
-        hint.isHidden = multi
-        selectionCount.isHidden = !multi
-        actionBar.isHidden = !multi
-        if multi {
-            selectionCount.stringValue = "\(n) selected"
-            copyButton.attributedTitle = footerTitle("Copy \(n)", color: Theme.accent)
-        }
+        refreshDetail()
+        let multi = tableView.numberOfSelectedRows > 1
         tableView.enumerateAvailableRowViews { rowView, _ in
             (rowView.view(atColumn: 0) as? HistoryRowView)?.setMultiSelect(multi)
         }
     }
 
-    // Right-click menu, rebuilt for the clicked row. Like Finder, an unselected row is selected alone first.
+    // MARK: Right-click menu
+
+    /// Rebuilt for the clicked row each time it opens. Right-clicking outside the selection
+    /// selects just that row first, so the actions always apply to what's highlighted.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        let row = tableView.clickedRow
-        guard row >= 0, row < results.count else { return }
-        if !tableView.selectedRowIndexes.contains(row) {
-            tableView.selectRowIndexes([row], byExtendingSelection: false)
-            anchorRow = row; cursorRow = row
+        let clicked = tableView.clickedRow
+        guard clicked >= 0, clicked < results.count else { return }
+        if !tableView.selectedRowIndexes.contains(clicked) {
+            tableView.selectRowIndexes([clicked], byExtendingSelection: false)
+            anchorRow = clicked; cursorRow = clicked
         }
-        let items = selectedItems()
-        let pin = items.contains { !$0.pinned }   // mirrors AppCoordinator's pin-all-unless-all-pinned
-        for (title, action) in [(items.count > 1 ? "Copy \(items.count) Items" : "Copy", #selector(menuCopy)),
-                                (pin ? "Pin" : "Unpin", #selector(menuPinToggle)),
-                                ("Delete", #selector(menuDelete))] {
+        let rows = selectedRows()
+        func add(_ title: String, _ action: Selector) {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
             item.target = self
-            item.representedObject = items
             menu.addItem(item)
         }
+        add(rows.count == 1 ? "Copy" : "Copy \(rows.count) Items", #selector(chooseSelected))
+        add(rows.allSatisfy(\.item.pinned) ? "Unpin" : "Pin", #selector(pinSelected))
+        if rows.count == 1, rows[0].flavor == .link { add("Open Link", #selector(openSelectedLink)) }
+        if rows.count == 1, rows[0].item.kind == .file { add("Reveal in Finder", #selector(revealSelectedFiles)) }
+        menu.addItem(.separator())
+        add("Delete", #selector(deleteSelected))
     }
 
-    @objc private func menuCopy(_ sender: NSMenuItem) { (sender.representedObject as? [ClipboardItem]).map(onChoose) }
-    @objc private func menuPinToggle(_ sender: NSMenuItem) { (sender.representedObject as? [ClipboardItem]).map(onPinToggle) }
-    @objc private func menuDelete(_ sender: NSMenuItem) { (sender.representedObject as? [ClipboardItem]).map(onDelete) }
+    @objc private func pinSelected() {
+        let items = selectedItems()
+        if !items.isEmpty { onPinToggle(items) }
+    }
+
+    @objc private func deleteSelected() {
+        let items = selectedItems()
+        if !items.isEmpty { onDelete(items) }
+    }
+
+    @objc private func openSelectedLink() {
+        guard let item = selectedItems().first,
+              let url = URL(string: (item.text ?? item.preview).trimmingCharacters(in: .whitespacesAndNewlines))
+        else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func revealSelectedFiles() {
+        guard let item = selectedItems().first else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(item.filePaths.map { URL(fileURLWithPath: $0) })
+    }
 
     // DataSource / Delegate
     func numberOfRows(in tableView: NSTableView) -> Int { results.count }
@@ -525,7 +665,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
             v.onCheckboxClick = { [weak self] cell in self?.toggleRow(of: cell) }
             return v
         }()
-        cell.configure(results[row], imagesDir: imagesDir)
+        cell.configure(results[row], index: row, imagesDir: imagesDir, showQuickKey: quickKeys)
         cell.setMultiSelect(tableView.numberOfSelectedRows > 1)
         return cell
     }

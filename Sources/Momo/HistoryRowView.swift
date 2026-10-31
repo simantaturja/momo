@@ -1,11 +1,14 @@
 import AppKit
-import ImageIO
 import MomoCore
+import UniformTypeIdentifiers
 
-/// A kind badge: a subtle rounded container holding either a monochrome SF Symbol (tinted
-/// accent when its row is selected) or an image row's thumbnail.
+/// A kind badge: a subtle rounded container holding a monochrome SF Symbol (tinted accent when
+/// its row is selected), an untinted image (an image row's thumbnail or a file's type icon) or
+/// a color clip's swatch.
 private final class BadgeView: NSView {
     let iconView = NSImageView()
+    /// Drawn as a 16×16 swatch in place of the icon.
+    var swatch: NSColor? { didSet { needsDisplay = true } }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -23,6 +26,9 @@ private final class BadgeView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill(with: Theme.badgeFill)
+        guard let swatch else { return }
+        let square = NSRect(x: bounds.midX - 8, y: bounds.midY - 8, width: 16, height: 16)
+        NSBezierPath(roundedRect: square, xRadius: 4, yRadius: 4).fill(with: swatch)
     }
 }
 
@@ -38,6 +44,9 @@ final class HistoryRowView: NSTableCellView {
     private let label = NSTextField(labelWithString: "")
     private let pinIcon = NSImageView()
     private let timeLabel = NSTextField(labelWithString: "")
+    private var current: HistoryRow?
+    private var rowIndex = 0
+    private var relativeTime = ""
     private var currentImagePath: String?
     private var showingSymbol = true
     private var selected = false
@@ -47,8 +56,8 @@ final class HistoryRowView: NSTableCellView {
     private static let uncheckedImage = NSImage(systemSymbolName: "circle", accessibilityDescription: "Select")
     private static let checkedImage = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "Deselect")
 
-    // Path-keyed cache of already-decoded thumbnails, shared across reused cells.
-    private static let thumbCache = NSCache<NSString, NSImage>()
+    // File-type icons by lowercase extension, shared across reused cells.
+    private static let fileIcons = NSCache<NSString, NSImage>()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -125,63 +134,120 @@ final class HistoryRowView: NSTableCellView {
 
     @objc private func checkboxClicked() { onCheckboxClick?(self) }
 
-    func configure(_ item: ClipboardItem, imagesDir: String) {
-        label.stringValue = PreviewText.singleLine(item.preview)
-        timeLabel.stringValue = RelativeTime.format(item.createdAt, now: Date())
-        pinIcon.isHidden = !item.pinned
+    func configure(_ row: HistoryRow, index: Int, imagesDir: String, showQuickKey: Bool) {
+        current = row
+        rowIndex = index
+        relativeTime = RelativeTime.format(row.item.createdAt, now: Date())
+        setQuickKey(showQuickKey)
+        pinIcon.isHidden = !row.item.pinned
+        badge.swatch = nil
+        currentImagePath = nil
+        setLabel(imageSize: nil)
 
-        guard item.kind == .image, let rel = item.imagePath else {
-            showSymbol(for: item.kind)
-            return
-        }
-        currentImagePath = rel
-        if let cached = Self.thumbCache.object(forKey: rel as NSString) {
-            showThumbnail(cached)
-            return
-        }
-        // Lazy: downsample off the main queue, cache + set on main. Guard against cell reuse.
-        showSymbol(for: .image)
-        let token = rel
-        let path = (imagesDir as NSString).appendingPathComponent(rel)
-        DispatchQueue.global(qos: .userInitiated).async {
-            let img = Self.downsampledThumbnail(path: path, maxPixel: 48)
-            DispatchQueue.main.async {
-                if let img { Self.thumbCache.setObject(img, forKey: token as NSString) }
-                guard self.currentImagePath == token, let img else { return }   // row was reused
-                self.showThumbnail(img)
+        switch row.item.kind {
+        case .text:
+            switch row.flavor {
+            case .link: showSymbol("link")
+            case .code: showSymbol("curlybraces")
+            case .plain: showSymbol("doc.text")
+            case .color:
+                if let color = HexColor(row.line) { showSwatch(color.nsColor) } else { showSymbol("doc.text") }
             }
+        case .richText: showSymbol("textformat")
+        case .file: showImage(Self.fileIcon(for: row.item.filePaths.first ?? ""))
+        case .image: showThumbnail(row.item.imagePath, imagesDir: imagesDir)
         }
     }
 
-    private func showSymbol(for kind: ItemKind) {
+    /// While ⌘ is held the first nine rows show their ⌘1…⌘9 quick key instead of the time.
+    func setQuickKey(_ on: Bool) {
+        timeLabel.stringValue = on && rowIndex < 9 ? "⌘\(rowIndex + 1)" : relativeTime
+    }
+
+    /// Plain `stringValue` when there's nothing to style; otherwise an attributed label with
+    /// matched letters, a dim link scheme, and a dim file folder or image size after the text.
+    private func setLabel(imageSize: (width: Int, height: Int)?) {
+        guard let row = current else { return }
+        let code = row.flavor == .code
+        let font: NSFont = code ? .monospacedSystemFont(ofSize: 12, weight: .regular) : .systemFont(ofSize: 13)
+        var suffix = ""
+        if let imageSize {
+            suffix = " · \(imageSize.width) × \(imageSize.height)"
+        } else if row.item.kind == .file, let first = row.item.filePaths.first {
+            suffix = "  " + ((first as NSString).deletingLastPathComponent as NSString).abbreviatingWithTildeInPath
+        }
+        let line = row.line as NSString
+        let scheme = row.flavor == .link ? line.range(of: "://") : NSRange(location: NSNotFound, length: 0)
+        label.font = font
+        label.textColor = .labelColor
+        guard !row.matchedPositions.isEmpty || !suffix.isEmpty || scheme.location != NSNotFound else {
+            label.stringValue = row.line   // fast path: nothing to style
+            return
+        }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail   // attributed text ignores the field's own mode
+        let text = NSMutableAttributedString(string: row.line + suffix, attributes: [
+            .font: font, .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph,
+        ])
+        if scheme.location != NSNotFound {
+            text.addAttribute(.foregroundColor, value: Theme.dimText, range: NSRange(location: 0, length: NSMaxRange(scheme)))
+        }
+        if !suffix.isEmpty {
+            text.addAttribute(.foregroundColor, value: Theme.dimText,
+                              range: NSRange(location: line.length, length: (suffix as NSString).length))
+        }
+        let bold: NSFont = code ? .monospacedSystemFont(ofSize: 12, weight: .bold) : .boldSystemFont(ofSize: 13)
+        for range in PreviewText.highlightRanges(in: row.line, positions: row.matchedPositions) {
+            text.addAttributes([.foregroundColor: Theme.matchText, .font: bold], range: range)
+        }
+        label.attributedStringValue = text
+    }
+
+    private func showThumbnail(_ rel: String?, imagesDir: String) {
+        guard let rel else { showSymbol("photo"); return }
+        let path = (imagesDir as NSString).appendingPathComponent(rel)
+        currentImagePath = path
+        if let cached = ImageLoader.cached(path: path, maxPixel: ImageLoader.thumbnailPixels) {
+            showLoaded(cached)
+            return
+        }
+        // Lazy: decoded off the main queue. Guard against cell reuse before showing it.
+        showSymbol("photo")
+        ImageLoader.load(path: path, maxPixel: ImageLoader.thumbnailPixels) { [weak self] loaded in
+            guard let self, self.currentImagePath == path, let loaded else { return }
+            self.showLoaded(loaded)
+        }
+    }
+
+    private func showLoaded(_ loaded: LoadedImage) {
+        showImage(loaded.image)
+        setLabel(imageSize: (width: loaded.pixelWidth, height: loaded.pixelHeight))
+    }
+
+    private func showSymbol(_ name: String) {
         showingSymbol = true
-        badge.iconView.image = NSImage(systemSymbolName: symbol(for: kind), accessibilityDescription: nil)
+        badge.iconView.image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
         badge.iconView.contentTintColor = selected ? Theme.accent : Theme.badgeSymbol
     }
 
-    private func showThumbnail(_ image: NSImage) {
+    /// Thumbnails and file icons keep their own colors.
+    private func showImage(_ image: NSImage) {
         showingSymbol = false
         badge.iconView.contentTintColor = nil
         badge.iconView.image = image
     }
 
-    private static func downsampledThumbnail(path: String, maxPixel: Int) -> NSImage? {
-        guard let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) else { return nil }
-        let opts: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
-        ]
-        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
-        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+    private func showSwatch(_ color: NSColor) {
+        showingSymbol = false
+        badge.iconView.image = nil
+        badge.swatch = color
     }
 
-    private func symbol(for kind: ItemKind) -> String {
-        switch kind {
-        case .text: return "doc.text"
-        case .richText: return "textformat"
-        case .image: return "photo"
-        case .file: return "doc"
-        }
+    private static func fileIcon(for path: String) -> NSImage {
+        let ext = (path as NSString).pathExtension.lowercased()
+        if let cached = fileIcons.object(forKey: ext as NSString) { return cached }
+        let icon = NSWorkspace.shared.icon(for: UTType(filenameExtension: ext) ?? .data)
+        fileIcons.setObject(icon, forKey: ext as NSString)
+        return icon
     }
 }
