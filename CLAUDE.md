@@ -43,7 +43,7 @@ absolute path into the module cache; a stale cache fails with
 - **Do NOT add a test harness or DI to the shell.** `Paster`/`Settings`/`PanelController`/
   `HotkeyManager` touch AppKit / `UserDefaults` / `NSPasteboard.general` directly by design; there
   is no logic in them worth a seam. App-target changes are compile+build verified, not unit-tested.
-- Baseline: **95 tests, all green.** Keep them green; show the output before claiming done.
+- Baseline: **103 tests, all green.** Keep them green; show the output before claiming done.
 
 ## Data model & invariants (don't break these)
 
@@ -57,6 +57,9 @@ absolute path into the module cache; a stale cache fails with
   ingest. Concealed (passwords) is kept only when the user opts in (`Settings.savePasswords`,
   off by default); transient/auto-generated are always dropped. Never persist anything that
   bypasses it.
+- **Source app** (`ClipboardItem.sourceApp`) is the frontmost app when the copy is seen — nil
+  for the clip already there at launch and for Momo's own copies (`Paster` tags them with
+  `ClipboardMonitor.ownCopyType`). Dedupe keeps the first-seen source.
 
 ## Working style (agent loop)
 

@@ -21,10 +21,15 @@ public final class Store {
                     createdAt DOUBLE NOT NULL,
                     pinned INTEGER NOT NULL DEFAULT 0,
                     contentHash TEXT NOT NULL UNIQUE,
-                    imageBytes INTEGER NOT NULL DEFAULT 0
+                    imageBytes INTEGER NOT NULL DEFAULT 0,
+                    sourceApp TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_items_order ON items(pinned DESC, createdAt DESC);
                 """)
+            // Databases created before sourceApp existed get the column added in place.
+            if try !db.columns(in: "items").contains(where: { $0.name == "sourceApp" }) {
+                try db.execute(sql: "ALTER TABLE items ADD COLUMN sourceApp TEXT")
+            }
         }
     }
 
@@ -36,16 +41,18 @@ public final class Store {
                                arguments: [item.createdAt.timeIntervalSince1970, existingId])
                 // Dedupe hit: the existing row keeps its own blob, so the just-written
                 // incoming image blob is redundant — reclaim it instead of orphaning it.
+                // It keeps its first-seen sourceApp too, so a re-copy from Momo's panel
+                // (seen while focus goes back to another app) can't change it.
                 if item.kind == .image { removeBlob(item.imagePath) }
             } else {
                 try db.execute(sql: """
-                    INSERT INTO items (id, kind, preview, text, imagePath, filePaths, createdAt, pinned, contentHash, imageBytes)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO items (id, kind, preview, text, imagePath, filePaths, createdAt, pinned, contentHash, imageBytes, sourceApp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, arguments: [
                         item.id.uuidString, item.kind.rawValue, item.preview, item.text,
                         item.imagePath, item.filePaths.joined(separator: "\n"),
                         item.createdAt.timeIntervalSince1970, item.pinned ? 1 : 0,
-                        item.contentHash, imageBytesFor(item),
+                        item.contentHash, imageBytesFor(item), item.sourceApp,
                     ])
             }
         }
@@ -195,7 +202,8 @@ public final class Store {
             filePaths: files.isEmpty ? [] : files.components(separatedBy: "\n"),
             createdAt: Date(timeIntervalSince1970: row["createdAt"]),
             pinned: (row["pinned"] as Int) == 1,
-            contentHash: row["contentHash"]
+            contentHash: row["contentHash"],
+            sourceApp: row["sourceApp"]
         )
     }
 }

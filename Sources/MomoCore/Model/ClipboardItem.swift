@@ -14,10 +14,12 @@ public struct ClipboardItem: Identifiable, Equatable, Sendable {
     public var createdAt: Date
     public var pinned: Bool
     public var contentHash: String
+    /// Name of the app the copy came from (the frontmost app when it was seen); nil if unknown.
+    public var sourceApp: String?
 
     public init(id: UUID = UUID(), kind: ItemKind, preview: String,
                 text: String?, imagePath: String?, filePaths: [String],
-                createdAt: Date, pinned: Bool, contentHash: String) {
+                createdAt: Date, pinned: Bool, contentHash: String, sourceApp: String? = nil) {
         self.id = id
         self.kind = kind
         self.preview = preview
@@ -27,6 +29,7 @@ public struct ClipboardItem: Identifiable, Equatable, Sendable {
         self.createdAt = createdAt
         self.pinned = pinned
         self.contentHash = contentHash
+        self.sourceApp = sourceApp
     }
 
     /// True if this item passes the given kind/extension filter. `kind == nil` matches

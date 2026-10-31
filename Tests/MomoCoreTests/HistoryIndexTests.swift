@@ -85,6 +85,19 @@ final class HistoryIndexTests: XCTestCase {
         XCTAssertEqual(idx.search("").map(\.item.imagePath), ["stored.png"])
     }
 
+    func testPrependKeepsTheSourceAppOfTheItemItDedupes() {
+        // A re-copy from Momo's panel is captured while Momo, or the app it hands focus back to,
+        // is in front — so the first-seen source stands, as it does in Store.upsert.
+        let idx = HistoryIndex()
+        var first = item("a", at: 1); first.sourceApp = "Safari"
+        idx.replaceAll([first])
+        var recopy = item("a", at: 2); recopy.sourceApp = "Notes"
+        idx.prepend(recopy)
+        var fresh = item("b", at: 3); fresh.sourceApp = "Xcode"
+        idx.prepend(fresh)
+        XCTAssertEqual(idx.search("").map(\.item.sourceApp), ["Xcode", "Safari"])
+    }
+
     private func fileItem(_ paths: [String], at t: TimeInterval) -> ClipboardItem {
         ClipboardItem(kind: .file, preview: paths.joined(separator: ", "), text: nil, imagePath: nil,
                       filePaths: paths, createdAt: Date(timeIntervalSince1970: t), pinned: false,

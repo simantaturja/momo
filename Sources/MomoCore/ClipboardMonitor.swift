@@ -4,26 +4,39 @@ public final class ClipboardMonitor {
     private let pasteboard: PasteboardReading
     private let writeImageBlob: (Data) throws -> String
     private let allowsConcealed: () -> Bool
+    private let sourceApp: () -> String?
     private var lastChangeCount: Int?
 
     public var onNewItem: ((ClipboardItem) -> Void)?
 
     /// `allowsConcealed` is asked on every capture, so a settings change applies to the next copy.
+    /// `sourceApp` names the app in front when a copy is seen; it isn't asked for the clip found at
+    /// launch or for Momo's own copies.
     public init(pasteboard: PasteboardReading, writeImageBlob: @escaping (Data) throws -> String,
-                allowsConcealed: @escaping () -> Bool = { false }) {
+                allowsConcealed: @escaping () -> Bool = { false },
+                sourceApp: @escaping () -> String? = { nil }) {
         self.pasteboard = pasteboard
         self.writeImageBlob = writeImageBlob
         self.allowsConcealed = allowsConcealed
+        self.sourceApp = sourceApp
     }
+
+    /// Pasteboard type Momo adds to its own copies, which are seen while focus goes back to another app.
+    public static let ownCopyType = "me.momo.app.own-copy"
 
     public func poll(now: Date) {
         let count = pasteboard.changeCount
         guard count != lastChangeCount else { return }
+        let sawTheCopy = lastChangeCount != nil   // what's on the clipboard at launch was copied unseen
         lastChangeCount = count
 
-        guard PrivacyFilter.shouldStore(pasteboardTypes: pasteboard.types,
+        let types = pasteboard.types
+        guard PrivacyFilter.shouldStore(pasteboardTypes: types,
                                         allowConcealed: allowsConcealed()) else { return }
-        guard let item = buildItem(now: now) else { return }
+        // Asked before building the item: saving a big image takes a while, and the user may switch apps.
+        let source = sawTheCopy && !types.contains(Self.ownCopyType) ? sourceApp() : nil
+        guard var item = buildItem(now: now) else { return }
+        item.sourceApp = source
         onNewItem?(item)
     }
 

@@ -22,6 +22,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.isMovable = false                 // a dropdown stays pinned under its icon
         panel.level = .floating
         panel.hidesOnDeactivate = false
+        panel.allowsToolTipsWhenApplicationIsInactive = true   // a row's "Copied from" tooltip
         panel.isReleasedWhenClosed = false      // never torn down -> pre-warmed
 
         // Translucent rounded card: a vibrancy view is the window's content, with the
