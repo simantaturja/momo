@@ -27,11 +27,12 @@ public final class HistoryIndex {
     public func prepend(_ item: ClipboardItem) {
         var item = item
         if let existing = rows.first(where: { $0.item.contentHash == item.contentHash })?.item {
+            guard let added = item.copyCount else { return }   // unseen (the launch clip): as Store.upsert
             item = ClipboardItem(id: existing.id, kind: item.kind, preview: item.preview,
                                   text: item.text, imagePath: existing.imagePath, filePaths: item.filePaths,
                                   createdAt: item.createdAt, pinned: existing.pinned, contentHash: item.contentHash,
                                   sourceApp: existing.sourceApp, firstCopiedAt: existing.firstCopiedAt,
-                                  copyCount: existing.copyCount.map { $0 + (item.copyCount ?? 0) })
+                                  copyCount: existing.copyCount.map { $0 + added })
         }
         rows.removeAll { $0.item.contentHash == item.contentHash }
         rows.insert(Self.row(item), at: 0)

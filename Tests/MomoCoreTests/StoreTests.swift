@@ -50,7 +50,7 @@ final class StoreTests: XCTestCase {
         let store = try makeStore()
         try store.upsert(textItem("a", at: 1))
         try store.upsert(textItem("b", at: 2))
-        try store.upsert(textItem("a", at: 3))   // same content as first, newer
+        try store.upsert(seenCopy("a", at: 3))   // a re-copy of the first, newer
         let recent = try store.recent(limit: 10)
         XCTAssertEqual(recent.map(\.preview), ["a", "b"])  // "a" moved to top, no dup
         XCTAssertEqual(recent.count, 2)
@@ -73,7 +73,8 @@ final class StoreTests: XCTestCase {
             ClipboardItem(kind: .file, preview: paths.joined(separator: ", "), text: nil,
                           imagePath: nil, filePaths: paths, createdAt: Date(timeIntervalSince1970: t),
                           pinned: false,
-                          contentHash: ClipboardItem.contentHash(kind: .file, text: nil, imageHash: nil, filePaths: paths))
+                          contentHash: ClipboardItem.contentHash(kind: .file, text: nil, imageHash: nil, filePaths: paths),
+                          copyCount: 1)   // each one a copy Momo saw
         }
         try store.upsert(fileItem(["/a.txt"], at: 1))
         try store.upsert(fileItem(["/b.txt"], at: 2))
@@ -222,12 +223,14 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(recent.map(\.copyCount), [3])
     }
 
-    func testAClipMomoDidNotSeeCopiedIsNotCountedAgain() throws {
-        // The clip on the clipboard at launch is most likely one Momo recorded before it quit.
+    func testAClipMomoDidNotSeeCopiedChangesNothingWhenItIsKnown() throws {
+        // The clip on the clipboard at launch is most likely one Momo recorded before it quit:
+        // relaunching isn't a copy, so its last copy time and count stay.
         let store = try makeStore()
         try store.upsert(seenCopy("a", at: 1, from: "Safari"))
         try store.upsert(textItem("a", at: 2))   // the launch clip: no known source or history
         let recent = try store.recent(limit: 10)
+        XCTAssertEqual(recent.map(\.createdAt), [Date(timeIntervalSince1970: 1)])
         XCTAssertEqual(recent.map(\.copyCount), [1])
         XCTAssertEqual(recent.map(\.firstCopiedAt), [Date(timeIntervalSince1970: 1)])
         XCTAssertEqual(recent.map(\.sourceApp?.name), ["Safari"])
@@ -269,6 +272,36 @@ final class StoreTests: XCTestCase {
 
         // Reopening the upgraded file must not try to add the columns again.
         XCTAssertEqual(try Store(path: path, imagesDirectory: dir).recent(limit: 10), recent)
+    }
+
+    func testUpgradesADatabaseThatHasOnlyTheSourceAppColumn() throws {
+        // Builds of this branch before the copy history added only `sourceApp`; the other
+        // columns must still be added, one by one, without touching it.
+        let dir = NSTemporaryDirectory() + "momo-test-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let path = (dir as NSString).appendingPathComponent("history.sqlite")
+        try runSQL(at: path, """
+            CREATE TABLE items (
+                id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                preview TEXT NOT NULL,
+                text TEXT,
+                imagePath TEXT,
+                filePaths TEXT NOT NULL DEFAULT '',
+                createdAt DOUBLE NOT NULL,
+                pinned INTEGER NOT NULL DEFAULT 0,
+                contentHash TEXT NOT NULL UNIQUE,
+                imageBytes INTEGER NOT NULL DEFAULT 0,
+                sourceApp TEXT
+            );
+            INSERT INTO items (id, kind, preview, text, createdAt, contentHash, sourceApp)
+            VALUES ('\(UUID().uuidString)', 'text', 'old', 'old', 1, 'old-hash', 'Safari');
+            """)
+
+        let recent = try Store(path: path, imagesDirectory: dir).recent(limit: 10)
+        XCTAssertEqual(recent.map(\.sourceApp), [SourceApp(name: "Safari")])
+        XCTAssertEqual(recent.map(\.firstCopiedAt), [nil])
+        XCTAssertEqual(recent.map(\.copyCount), [nil])
     }
 
     private func runSQL(at path: String, _ sql: String) throws {

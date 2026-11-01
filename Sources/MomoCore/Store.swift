@@ -46,10 +46,13 @@ public final class Store {
         try dbQueue.write { db in
             if let existingId = try String.fetchOne(db,
                 sql: "SELECT id FROM items WHERE contentHash = ?", arguments: [item.contentHash]) {
-                // A copy Momo saw adds 1 to the count; one it didn't (the clip at launch) adds 0,
-                // and an unknown (NULL) count stays unknown.
-                try db.execute(sql: "UPDATE items SET createdAt = ?, copyCount = copyCount + ? WHERE id = ?",
-                               arguments: [item.createdAt.timeIntervalSince1970, item.copyCount ?? 0, existingId])
+                // A copy Momo saw is the new last copy and adds 1 (an unknown, NULL, count stays
+                // unknown). One it didn't see, the clip found at launch, is most likely what it
+                // recorded before it quit: relaunching isn't a copy, so nothing changes.
+                if let added = item.copyCount {
+                    try db.execute(sql: "UPDATE items SET createdAt = ?, copyCount = copyCount + ? WHERE id = ?",
+                                   arguments: [item.createdAt.timeIntervalSince1970, added, existingId])
+                }
                 // Dedupe hit: the existing row keeps its own blob, so the just-written
                 // incoming image blob is redundant — reclaim it instead of orphaning it.
                 // It keeps its first-seen sourceApp and first copy time too, so a re-copy from

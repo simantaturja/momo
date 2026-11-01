@@ -43,7 +43,7 @@ absolute path into the module cache; a stale cache fails with
 - **Do NOT add a test harness or DI to the shell.** `Paster`/`Settings`/`PanelController`/
   `HotkeyManager` touch AppKit / `UserDefaults` / `NSPasteboard.general` directly by design; there
   is no logic in them worth a seam. App-target changes are compile+build verified, not unit-tested.
-- Baseline: **111 tests, all green.** Keep them green; show the output before claiming done.
+- Baseline: **112 tests, all green.** Keep them green; show the output before claiming done.
 
 ## Data model & invariants (don't break these)
 
@@ -61,8 +61,9 @@ absolute path into the module cache; a stale cache fails with
   the source is the frontmost app when the copy is seen — nil for Momo's own copies (`Paster`
   tags them with `ClipboardMonitor.ownCopyType`). All three are nil (unknown) for the clip
   already there at launch, whose copy wasn't seen, and for rows from before they were tracked.
-  Dedupe keeps the first source and first copy time and adds 1 to the count per seen copy
-  (0 for an unseen one; unknown stays unknown) — in both `Store.upsert` and `HistoryIndex.prepend`.
+  Dedupe keeps the first source and first copy time, and a seen copy bumps `createdAt` and adds
+  1 to the count (unknown stays unknown); an unseen copy of a known item changes nothing —
+  relaunching isn't a copy. Both `Store.upsert` and `HistoryIndex.prepend` follow these rules.
 
 ## Working style (agent loop)
 

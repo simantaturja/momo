@@ -47,8 +47,8 @@ final class HistoryIndexTests: XCTestCase {
 
     func testPrependMovesDuplicateToFront() {
         let idx = HistoryIndex()
-        idx.replaceAll([item("a", at: 1), item("b", at: 2)])
-        idx.prepend(item("a", at: 3))   // same content hash as existing "a"
+        idx.replaceAll([item("b", at: 2), item("a", at: 1)])
+        idx.prepend(seenCopy("a", at: 3))   // a re-copy of "a"
         XCTAssertEqual(idx.search("").map(\.item.preview), ["a", "b"])
         XCTAssertEqual(idx.search("").count, 2)
     }
@@ -59,7 +59,7 @@ final class HistoryIndexTests: XCTestCase {
         idx.replaceAll([existing, item("b", at: 2)])
         let incoming = ClipboardItem(id: UUID(), kind: .text, preview: "a", text: "a",
                                       imagePath: nil, filePaths: [], createdAt: Date(timeIntervalSince1970: 3),
-                                      pinned: false, contentHash: existing.contentHash)
+                                      pinned: false, contentHash: existing.contentHash, copyCount: 1)
         XCTAssertNotEqual(incoming.id, existing.id)
         idx.prepend(incoming)
         let front = idx.search("").first!
@@ -69,7 +69,7 @@ final class HistoryIndexTests: XCTestCase {
     func testPrependKeepsThePinOfTheItemItDedupes() {
         let idx = HistoryIndex()
         idx.replaceAll([item("a", at: 2, pinned: true), item("b", at: 1)])
-        idx.prepend(item("a", at: 3))   // a re-copy always arrives unpinned; Store.upsert keeps the pin
+        idx.prepend(seenCopy("a", at: 3))   // a re-copy always arrives unpinned; Store.upsert keeps the pin
         XCTAssertEqual(idx.search("").map(\.item.pinned), [true, false])
         XCTAssertEqual(idx.search("", scope: .pinned).map(\.item.preview), ["a"])
     }
@@ -77,7 +77,8 @@ final class HistoryIndexTests: XCTestCase {
     func testPrependKeepsTheBlobOfTheImageItDedupes() {
         let image = { (path: String, t: TimeInterval) in
             ClipboardItem(kind: .image, preview: "Image", text: nil, imagePath: path, filePaths: [],
-                          createdAt: Date(timeIntervalSince1970: t), pinned: false, contentHash: "same-bytes")
+                          createdAt: Date(timeIntervalSince1970: t), pinned: false, contentHash: "same-bytes",
+                          copyCount: 1)
         }
         let idx = HistoryIndex()
         idx.replaceAll([image("stored.png", 1)])
@@ -86,9 +87,9 @@ final class HistoryIndexTests: XCTestCase {
     }
 
     /// What the monitor emits for a copy it saw happen.
-    private func seenCopy(_ s: String, at t: TimeInterval, from app: String, count: Int = 1) -> ClipboardItem {
+    private func seenCopy(_ s: String, at t: TimeInterval, from app: String? = nil, count: Int = 1) -> ClipboardItem {
         var seen = item(s, at: t)
-        seen.sourceApp = SourceApp(name: app)
+        seen.sourceApp = app.map { SourceApp(name: $0) }
         seen.firstCopiedAt = Date(timeIntervalSince1970: t)
         seen.copyCount = count
         return seen
@@ -106,16 +107,17 @@ final class HistoryIndexTests: XCTestCase {
         XCTAssertEqual(items.map(\.copyCount), [1, 3])
     }
 
-    func testPrependLeavesUnknownHistoryUnknownAndDoesNotCountUnseenCopies() {
+    func testPrependLeavesUnknownHistoryUnknownAndIgnoresUnseenCopiesOfKnownItems() {
         let idx = HistoryIndex()
         idx.replaceAll([item("old", at: 1), seenCopy("a", at: 2, from: "Safari")])   // "old" predates tracking
         idx.prepend(seenCopy("old", at: 3, from: "Notes"))
-        idx.prepend(item("a", at: 4))   // the launch clip: a copy Momo didn't see
+        idx.prepend(item("a", at: 4))   // the launch clip, already known: relaunching isn't a copy
         let items = idx.search("").map(\.item)
-        XCTAssertEqual(items.map(\.preview), ["a", "old"])
-        XCTAssertEqual(items.map(\.copyCount), [1, nil])
-        XCTAssertEqual(items.map(\.firstCopiedAt), [Date(timeIntervalSince1970: 2), nil])
-        XCTAssertEqual(items.map(\.sourceApp?.name), ["Safari", nil])
+        XCTAssertEqual(items.map(\.preview), ["old", "a"])   // "a" didn't move
+        XCTAssertEqual(items.map(\.createdAt), [Date(timeIntervalSince1970: 3), Date(timeIntervalSince1970: 2)])
+        XCTAssertEqual(items.map(\.copyCount), [nil, 1])
+        XCTAssertEqual(items.map(\.firstCopiedAt), [nil, Date(timeIntervalSince1970: 2)])
+        XCTAssertEqual(items.map(\.sourceApp?.name), [nil, "Safari"])
     }
 
     private func fileItem(_ paths: [String], at t: TimeInterval) -> ClipboardItem {

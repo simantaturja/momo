@@ -75,6 +75,7 @@ final class CopyCard {
             stack.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
             stack.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
             separator.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24),
+            separator.heightAnchor.constraint(equalToConstant: 1),
             appIcon.widthAnchor.constraint(equalToConstant: 14),
             appIcon.heightAnchor.constraint(equalToConstant: 14),
         ])
@@ -86,6 +87,12 @@ final class CopyCard {
         hide()
         self.row = row
         timer = Timer.scheduledTimer(withTimeInterval: Self.delay, repeats: false) { [weak self] _ in self?.show() }
+        // Like a tooltip, any scroll, key press or click puts it away, or stops it from showing.
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .keyDown, .leftMouseDown,
+                                                                   .rightMouseDown]) { [weak self] event in
+            DispatchQueue.main.async { self?.hide() }
+            return event
+        }
     }
 
     /// The pointer left `row`: hide its card, or don't show it.
@@ -122,12 +129,6 @@ final class CopyCard {
         factsLabel.stringValue = lines.joined(separator: "\n")
         window.setFrame(frame(for: stack.fittingSize), display: true)
         window.orderFront(nil)
-        // Like a tooltip, any scroll, key press or click puts it away.
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .keyDown, .leftMouseDown,
-                                                                   .rightMouseDown]) { [weak self] event in
-            DispatchQueue.main.async { self?.hide() }
-            return event
-        }
     }
 
     /// Below and right of the pointer, like a tooltip; above it when there's no room below.
