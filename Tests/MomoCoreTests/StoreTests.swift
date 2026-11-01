@@ -89,14 +89,19 @@ final class StoreTests: XCTestCase {
         let data = Data(count: 32)
         let p1 = try store.writeImageBlob(data)
         let p2 = try store.writeImageBlob(data)
+        let p3 = try store.writeImageBlob(data)
         XCTAssertNotEqual(p1, p2)
         // Same dedupe key (content hash), distinct blob files on disk.
         try store.upsert(imageItem(path: p1, hash: "img-hash", at: 1))
-        try store.upsert(imageItem(path: p2, hash: "img-hash", at: 2))   // dedupe hit
+        var recopy = imageItem(path: p2, hash: "img-hash", at: 2)
+        recopy.copyCount = 1   // a re-copy Momo saw
+        try store.upsert(recopy)   // dedupe hit
+        try store.upsert(imageItem(path: p3, hash: "img-hash", at: 3))   // unseen (the clip at launch): dedupe hit too
         let recent = try store.recent(limit: 10)
         XCTAssertEqual(recent.count, 1, "same-hash image must dedupe to a single row")
         XCTAssertTrue(exists(dir, p1), "kept row's blob must survive")
         XCTAssertFalse(exists(dir, p2), "redundant incoming blob must be reclaimed, not orphaned")
+        XCTAssertFalse(exists(dir, p3), "also when the copy wasn't seen")
     }
 
     func testPruneEnforcesImageByteCap() throws {
@@ -298,10 +303,12 @@ final class StoreTests: XCTestCase {
             VALUES ('\(UUID().uuidString)', 'text', 'old', 'old', 1, 'old-hash', 'Safari');
             """)
 
-        let recent = try Store(path: path, imagesDirectory: dir).recent(limit: 10)
-        XCTAssertEqual(recent.map(\.sourceApp), [SourceApp(name: "Safari")])
-        XCTAssertEqual(recent.map(\.firstCopiedAt), [nil])
-        XCTAssertEqual(recent.map(\.copyCount), [nil])
+        let store = try Store(path: path, imagesDirectory: dir)
+        try store.upsert(seenCopy("new", at: 2, from: "Notes"))   // writes every column: fails if one is missing
+        let recent = try store.recent(limit: 10)
+        XCTAssertEqual(recent.map(\.sourceApp), [SourceApp(name: "Notes", bundleID: "id.Notes"), SourceApp(name: "Safari")])
+        XCTAssertEqual(recent.map(\.firstCopiedAt), [Date(timeIntervalSince1970: 2), nil])
+        XCTAssertEqual(recent.map(\.copyCount), [1, nil])
     }
 
     private func runSQL(at path: String, _ sql: String) throws {
