@@ -155,10 +155,11 @@ private final class CardView: NSView {
     func show(content text: String, lines: [Line]) -> NSSize {
         content = NSAttributedString(string: text, attributes: Self.contentAttributes)
         self.lines = lines
-        // As wide as the widest line, between the limits; longer content wraps.
+        // As wide as the widest line, between the limits (longer content wraps), plus 1pt so the
+        // widest value isn't cut by rounding.
         let widest = max(Self.textBounds(content, width: Self.maxTextWidth).width,
                          lines.map(Self.width(of:)).max() ?? 0)
-        textWidth = ceil(min(Self.maxTextWidth, max(Self.minTextWidth, widest)))
+        textWidth = ceil(min(Self.maxTextWidth, max(Self.minTextWidth, widest))) + 1
         contentHeight = ceil(Self.textBounds(content, width: textWidth).height)
         needsDisplay = true
 
