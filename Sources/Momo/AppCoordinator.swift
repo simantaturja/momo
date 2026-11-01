@@ -64,7 +64,7 @@ final class AppCoordinator {
         let reader = NSPasteboardReader()
         monitor = ClipboardMonitor(pasteboard: reader, writeImageBlob: { [store] data in
             try store.writeImageBlob(data)
-        }, allowsConcealed: { Settings.savePasswords }, sourceApp: Self.frontmostAppName)
+        }, allowsConcealed: { Settings.savePasswords }, sourceApp: Self.frontmostApp)
 
         index.replaceAll((try? store.recent(limit: Settings.maxItems)) ?? [])
         monitor.onNewItem = { [weak self] item in
@@ -89,10 +89,11 @@ final class AppCoordinator {
 
     /// The app in front when a copy is seen, i.e. the one it was copied from; nil when that's
     /// Momo itself. Called on the poll queue (NSRunningApplication's properties are atomic).
-    private static func frontmostAppName() -> String? {
+    private static func frontmostApp() -> SourceApp? {
         guard let app = NSWorkspace.shared.frontmostApplication,
-              app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return nil }
-        return app.localizedName
+              app.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+              let name = app.localizedName else { return nil }
+        return SourceApp(name: name, bundleID: app.bundleIdentifier)
     }
 
     func runPrune() {

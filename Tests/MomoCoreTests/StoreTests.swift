@@ -13,12 +13,19 @@ final class StoreTests: XCTestCase {
         return (try Store(path: ":memory:", imagesDirectory: dir), dir)
     }
 
-    private func textItem(_ s: String, at t: TimeInterval, pinned: Bool = false,
-                          source: String? = nil) -> ClipboardItem {
+    private func textItem(_ s: String, at t: TimeInterval, pinned: Bool = false) -> ClipboardItem {
         ClipboardItem(kind: .text, preview: s, text: s, imagePath: nil, filePaths: [],
                       createdAt: Date(timeIntervalSince1970: t), pinned: pinned,
-                      contentHash: ClipboardItem.contentHash(kind: .text, text: s, imageHash: nil, filePaths: []),
-                      sourceApp: source)
+                      contentHash: ClipboardItem.contentHash(kind: .text, text: s, imageHash: nil, filePaths: []))
+    }
+
+    /// What the monitor emits for a copy it saw happen.
+    private func seenCopy(_ s: String, at t: TimeInterval, from app: String? = nil) -> ClipboardItem {
+        var item = textItem(s, at: t)
+        item.sourceApp = app.map { SourceApp(name: $0, bundleID: "id.\($0)") }
+        item.firstCopiedAt = Date(timeIntervalSince1970: t)
+        item.copyCount = 1
+        return item
     }
 
     private func imageItem(path: String, hash: String, at t: TimeInterval,
@@ -191,30 +198,48 @@ final class StoreTests: XCTestCase {
         XCTAssertTrue(exists(dir, oldPinned), "pinned blob retained on disk")
     }
 
-    func testSourceAppRoundTrips() throws {
+    func testCopyMetadataRoundTrips() throws {
         let store = try makeStore()
-        try store.upsert(textItem("a", at: 1, source: "Safari"))
-        try store.upsert(textItem("b", at: 2))   // source unknown
-        XCTAssertEqual(try store.recent(limit: 10).map(\.sourceApp), [nil, "Safari"])
-    }
-
-    func testDedupeKeepsTheFirstSourceApp() throws {
-        // A re-copy from Momo's panel is captured while Momo, or the app it hands focus back to,
-        // is in front — overwriting would credit the wrong app.
-        let store = try makeStore()
-        try store.upsert(textItem("a", at: 1, source: "Safari"))
-        try store.upsert(textItem("a", at: 2, source: "Notes"))
+        try store.upsert(seenCopy("a", at: 1, from: "Safari"))
+        try store.upsert(textItem("b", at: 2))   // nothing known about how it was copied
         let recent = try store.recent(limit: 10)
-        XCTAssertEqual(recent.map(\.sourceApp), ["Safari"])
-        XCTAssertEqual(recent.map(\.createdAt), [Date(timeIntervalSince1970: 2)])   // recency still bumped
+        XCTAssertEqual(recent.map(\.sourceApp), [nil, SourceApp(name: "Safari", bundleID: "id.Safari")])
+        XCTAssertEqual(recent.map(\.firstCopiedAt), [nil, Date(timeIntervalSince1970: 1)])
+        XCTAssertEqual(recent.map(\.copyCount), [nil, 1])
     }
 
-    func testUpgradesADatabaseFromBeforeSourceAppWithoutLosingRows() throws {
+    func testDedupeKeepsTheFirstSourceAndCopyTimeAndCountsTheCopy() throws {
+        // A re-copy from Momo's panel is seen while focus goes back to another app, so the
+        // first-seen source stands. The first copy time stays too, and every seen copy counts.
+        let store = try makeStore()
+        try store.upsert(seenCopy("a", at: 1, from: "Safari"))
+        try store.upsert(seenCopy("a", at: 2, from: "Notes"))
+        try store.upsert(seenCopy("a", at: 5))
+        let recent = try store.recent(limit: 10)
+        XCTAssertEqual(recent.map(\.sourceApp?.name), ["Safari"])
+        XCTAssertEqual(recent.map(\.firstCopiedAt), [Date(timeIntervalSince1970: 1)])
+        XCTAssertEqual(recent.map(\.createdAt), [Date(timeIntervalSince1970: 5)])   // the last copy
+        XCTAssertEqual(recent.map(\.copyCount), [3])
+    }
+
+    func testAClipMomoDidNotSeeCopiedIsNotCountedAgain() throws {
+        // The clip on the clipboard at launch is most likely one Momo recorded before it quit.
+        let store = try makeStore()
+        try store.upsert(seenCopy("a", at: 1, from: "Safari"))
+        try store.upsert(textItem("a", at: 2))   // the launch clip: no known source or history
+        let recent = try store.recent(limit: 10)
+        XCTAssertEqual(recent.map(\.copyCount), [1])
+        XCTAssertEqual(recent.map(\.firstCopiedAt), [Date(timeIntervalSince1970: 1)])
+        XCTAssertEqual(recent.map(\.sourceApp?.name), ["Safari"])
+    }
+
+    func testUpgradesADatabaseFromBeforeCopyMetadataWithoutLosingRows() throws {
         // A store that fails to open gets the user's whole history quarantined, so the upgrade
-        // path must work on a real file in the previous schema.
+        // path must work on a real file in the 0.8.0 schema.
         let dir = NSTemporaryDirectory() + "momo-test-\(UUID().uuidString)"
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         let path = (dir as NSString).appendingPathComponent("history.sqlite")
+        let oldHash = ClipboardItem.contentHash(kind: .text, text: "old", imageHash: nil, filePaths: [])
         try runSQL(at: path, """
             CREATE TABLE items (
                 id TEXT PRIMARY KEY,
@@ -229,18 +254,21 @@ final class StoreTests: XCTestCase {
                 imageBytes INTEGER NOT NULL DEFAULT 0
             );
             INSERT INTO items (id, kind, preview, text, createdAt, pinned, contentHash)
-            VALUES ('\(UUID().uuidString)', 'text', 'old', 'old', 1, 1, 'old-hash');
+            VALUES ('\(UUID().uuidString)', 'text', 'old', 'old', 1, 1, '\(oldHash)');
             """)
 
         let store = try Store(path: path, imagesDirectory: dir)
-        try store.upsert(textItem("new", at: 2, source: "Safari"))
+        try store.upsert(seenCopy("new", at: 2, from: "Safari"))
+        try store.upsert(seenCopy("old", at: 3, from: "Notes"))   // a re-copy of the old row
         let recent = try store.recent(limit: 10)
         XCTAssertEqual(recent.map(\.preview), ["old", "new"])   // old row kept, still pinned
-        XCTAssertEqual(recent.map(\.sourceApp), [nil, "Safari"])
+        // What wasn't recorded before the upgrade stays unknown, even after a re-copy.
+        XCTAssertEqual(recent.map(\.sourceApp?.name), [nil, "Safari"])
+        XCTAssertEqual(recent.map(\.firstCopiedAt), [nil, Date(timeIntervalSince1970: 2)])
+        XCTAssertEqual(recent.map(\.copyCount), [nil, 1])
 
-        // Reopening the upgraded file must not try to add the column again.
-        XCTAssertEqual(try Store(path: path, imagesDirectory: dir).recent(limit: 10).map(\.sourceApp),
-                       [nil, "Safari"])
+        // Reopening the upgraded file must not try to add the columns again.
+        XCTAssertEqual(try Store(path: path, imagesDirectory: dir).recent(limit: 10), recent)
     }
 
     private func runSQL(at path: String, _ sql: String) throws {

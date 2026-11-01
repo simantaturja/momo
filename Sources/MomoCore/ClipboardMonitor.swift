@@ -4,7 +4,7 @@ public final class ClipboardMonitor {
     private let pasteboard: PasteboardReading
     private let writeImageBlob: (Data) throws -> String
     private let allowsConcealed: () -> Bool
-    private let sourceApp: () -> String?
+    private let sourceApp: () -> SourceApp?
     private var lastChangeCount: Int?
 
     public var onNewItem: ((ClipboardItem) -> Void)?
@@ -14,7 +14,7 @@ public final class ClipboardMonitor {
     /// launch or for Momo's own copies.
     public init(pasteboard: PasteboardReading, writeImageBlob: @escaping (Data) throws -> String,
                 allowsConcealed: @escaping () -> Bool = { false },
-                sourceApp: @escaping () -> String? = { nil }) {
+                sourceApp: @escaping () -> SourceApp? = { nil }) {
         self.pasteboard = pasteboard
         self.writeImageBlob = writeImageBlob
         self.allowsConcealed = allowsConcealed
@@ -37,6 +37,10 @@ public final class ClipboardMonitor {
         let source = sawTheCopy && !types.contains(Self.ownCopyType) ? sourceApp() : nil
         guard var item = buildItem(now: now) else { return }
         item.sourceApp = source
+        if sawTheCopy {   // Momo's own copies count too: it saw them happen
+            item.firstCopiedAt = now
+            item.copyCount = 1
+        }
         onNewItem?(item)
     }
 

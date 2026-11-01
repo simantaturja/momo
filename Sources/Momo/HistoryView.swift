@@ -658,6 +658,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     /// Hover never survives a hide: the ordered-out panel gets no mouseExited.
     func clearHover() {
         tableView.enumerateAvailableRowViews { rowView, _ in (rowView as? PillRowView)?.clearHover() }
+        CopyCard.shared.hide()
     }
 
     @objc private func chooseSelected() {

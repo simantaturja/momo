@@ -85,17 +85,37 @@ final class HistoryIndexTests: XCTestCase {
         XCTAssertEqual(idx.search("").map(\.item.imagePath), ["stored.png"])
     }
 
-    func testPrependKeepsTheSourceAppOfTheItemItDedupes() {
-        // A re-copy from Momo's panel is captured while Momo, or the app it hands focus back to,
-        // is in front — so the first-seen source stands, as it does in Store.upsert.
+    /// What the monitor emits for a copy it saw happen.
+    private func seenCopy(_ s: String, at t: TimeInterval, from app: String, count: Int = 1) -> ClipboardItem {
+        var seen = item(s, at: t)
+        seen.sourceApp = SourceApp(name: app)
+        seen.firstCopiedAt = Date(timeIntervalSince1970: t)
+        seen.copyCount = count
+        return seen
+    }
+
+    func testPrependKeepsTheFirstCopyHistoryAndCountsTheCopy() {
+        // Mirrors Store.upsert: the first-seen source and first copy time stand, and the copy counts.
         let idx = HistoryIndex()
-        var first = item("a", at: 1); first.sourceApp = "Safari"
-        idx.replaceAll([first])
-        var recopy = item("a", at: 2); recopy.sourceApp = "Notes"
-        idx.prepend(recopy)
-        var fresh = item("b", at: 3); fresh.sourceApp = "Xcode"
-        idx.prepend(fresh)
-        XCTAssertEqual(idx.search("").map(\.item.sourceApp), ["Xcode", "Safari"])
+        idx.replaceAll([seenCopy("a", at: 1, from: "Safari", count: 2)])
+        idx.prepend(seenCopy("a", at: 3, from: "Notes"))
+        idx.prepend(seenCopy("b", at: 4, from: "Xcode"))
+        let items = idx.search("").map(\.item)
+        XCTAssertEqual(items.map(\.sourceApp?.name), ["Xcode", "Safari"])
+        XCTAssertEqual(items.map(\.firstCopiedAt), [Date(timeIntervalSince1970: 4), Date(timeIntervalSince1970: 1)])
+        XCTAssertEqual(items.map(\.copyCount), [1, 3])
+    }
+
+    func testPrependLeavesUnknownHistoryUnknownAndDoesNotCountUnseenCopies() {
+        let idx = HistoryIndex()
+        idx.replaceAll([item("old", at: 1), seenCopy("a", at: 2, from: "Safari")])   // "old" predates tracking
+        idx.prepend(seenCopy("old", at: 3, from: "Notes"))
+        idx.prepend(item("a", at: 4))   // the launch clip: a copy Momo didn't see
+        let items = idx.search("").map(\.item)
+        XCTAssertEqual(items.map(\.preview), ["a", "old"])
+        XCTAssertEqual(items.map(\.copyCount), [1, nil])
+        XCTAssertEqual(items.map(\.firstCopiedAt), [Date(timeIntervalSince1970: 2), nil])
+        XCTAssertEqual(items.map(\.sourceApp?.name), ["Safari", nil])
     }
 
     private func fileItem(_ paths: [String], at t: TimeInterval) -> ClipboardItem {

@@ -4,6 +4,17 @@ public enum ItemKind: String, Codable, Sendable {
     case text, richText, image, file
 }
 
+/// The app a copy came from: its display name and, to find its icon, its bundle identifier.
+public struct SourceApp: Equatable, Sendable {
+    public var name: String
+    public var bundleID: String?
+
+    public init(name: String, bundleID: String? = nil) {
+        self.name = name
+        self.bundleID = bundleID
+    }
+}
+
 public struct ClipboardItem: Identifiable, Equatable, Sendable {
     public let id: UUID
     public var kind: ItemKind
@@ -14,12 +25,19 @@ public struct ClipboardItem: Identifiable, Equatable, Sendable {
     public var createdAt: Date
     public var pinned: Bool
     public var contentHash: String
-    /// Name of the app the copy came from (the frontmost app when it was seen); nil if unknown.
-    public var sourceApp: String?
+    /// The app the content was first copied from (the frontmost app when it was seen).
+    /// This and the copy history below are nil when unknown: for items recorded before Momo
+    /// tracked them, and for the clip found on the clipboard at launch, whose copy Momo didn't see.
+    /// `createdAt` is the last copy.
+    public var sourceApp: SourceApp?
+    public var firstCopiedAt: Date?
+    /// How many times the content has been copied.
+    public var copyCount: Int?
 
     public init(id: UUID = UUID(), kind: ItemKind, preview: String,
                 text: String?, imagePath: String?, filePaths: [String],
-                createdAt: Date, pinned: Bool, contentHash: String, sourceApp: String? = nil) {
+                createdAt: Date, pinned: Bool, contentHash: String, sourceApp: SourceApp? = nil,
+                firstCopiedAt: Date? = nil, copyCount: Int? = nil) {
         self.id = id
         self.kind = kind
         self.preview = preview
@@ -30,6 +48,8 @@ public struct ClipboardItem: Identifiable, Equatable, Sendable {
         self.pinned = pinned
         self.contentHash = contentHash
         self.sourceApp = sourceApp
+        self.firstCopiedAt = firstCopiedAt
+        self.copyCount = copyCount
     }
 
     /// True if this item passes the given kind/extension filter. `kind == nil` matches

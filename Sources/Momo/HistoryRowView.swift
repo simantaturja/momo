@@ -120,8 +120,16 @@ final class HistoryRowView: NSTableCellView {
         updateCheckbox()
     }
 
-    /// Called by `PillRowView` on hover changes; a hovered row shows its checkbox.
-    func setHovered(_ value: Bool) { hovered = value; updateCheckbox() }
+    /// The item this row shows, for its hover card.
+    var item: ClipboardItem? { current?.item }
+
+    /// Called by `PillRowView` on hover changes; a hovered row shows its checkbox and, after a
+    /// moment, its hover card.
+    func setHovered(_ value: Bool) {
+        hovered = value
+        updateCheckbox()
+        if value { CopyCard.shared.schedule(for: self) } else { CopyCard.shared.cancel(for: self) }
+    }
 
     /// Set by `HistoryView` while ≥2 rows are selected; every row then shows its checkbox.
     func setMultiSelect(_ value: Bool) { multiSelect = value; updateCheckbox() }
@@ -140,7 +148,6 @@ final class HistoryRowView: NSTableCellView {
         relativeTime = RelativeTime.format(row.item.createdAt, now: Date())
         setQuickKey(showQuickKey)
         pinIcon.isHidden = !row.item.pinned
-        toolTip = row.item.sourceApp.map { "Copied from \($0)" }
         badge.swatch = nil
         currentImagePath = nil
         setLabel(imageSize: nil)

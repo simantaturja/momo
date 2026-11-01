@@ -30,7 +30,8 @@ public final class HistoryIndex {
             item = ClipboardItem(id: existing.id, kind: item.kind, preview: item.preview,
                                   text: item.text, imagePath: existing.imagePath, filePaths: item.filePaths,
                                   createdAt: item.createdAt, pinned: existing.pinned, contentHash: item.contentHash,
-                                  sourceApp: existing.sourceApp)
+                                  sourceApp: existing.sourceApp, firstCopiedAt: existing.firstCopiedAt,
+                                  copyCount: existing.copyCount.map { $0 + (item.copyCount ?? 0) })
         }
         rows.removeAll { $0.item.contentHash == item.contentHash }
         rows.insert(Self.row(item), at: 0)

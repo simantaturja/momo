@@ -22,37 +22,51 @@ public final class Store {
                     pinned INTEGER NOT NULL DEFAULT 0,
                     contentHash TEXT NOT NULL UNIQUE,
                     imageBytes INTEGER NOT NULL DEFAULT 0,
-                    sourceApp TEXT
+                    sourceApp TEXT,
+                    sourceAppBundleID TEXT,
+                    firstCopiedAt DOUBLE,
+                    copyCount INTEGER
                 );
                 CREATE INDEX IF NOT EXISTS idx_items_order ON items(pinned DESC, createdAt DESC);
                 """)
-            // Databases created before sourceApp existed get the column added in place.
-            if try !db.columns(in: "items").contains(where: { $0.name == "sourceApp" }) {
-                try db.execute(sql: "ALTER TABLE items ADD COLUMN sourceApp TEXT")
+            // Databases from before the copy history existed get its columns added in place;
+            // their rows' values stay NULL (unknown).
+            let columns = try Set(db.columns(in: "items").map(\.name))
+            for (name, sqlType) in Self.copyHistoryColumns where !columns.contains(name) {
+                try db.execute(sql: "ALTER TABLE items ADD COLUMN \(name) \(sqlType)")
             }
         }
     }
+
+    private static let copyHistoryColumns = [
+        ("sourceApp", "TEXT"), ("sourceAppBundleID", "TEXT"), ("firstCopiedAt", "DOUBLE"), ("copyCount", "INTEGER"),
+    ]
 
     public func upsert(_ item: ClipboardItem) throws {
         try dbQueue.write { db in
             if let existingId = try String.fetchOne(db,
                 sql: "SELECT id FROM items WHERE contentHash = ?", arguments: [item.contentHash]) {
-                try db.execute(sql: "UPDATE items SET createdAt = ? WHERE id = ?",
-                               arguments: [item.createdAt.timeIntervalSince1970, existingId])
+                // A copy Momo saw adds 1 to the count; one it didn't (the clip at launch) adds 0,
+                // and an unknown (NULL) count stays unknown.
+                try db.execute(sql: "UPDATE items SET createdAt = ?, copyCount = copyCount + ? WHERE id = ?",
+                               arguments: [item.createdAt.timeIntervalSince1970, item.copyCount ?? 0, existingId])
                 // Dedupe hit: the existing row keeps its own blob, so the just-written
                 // incoming image blob is redundant — reclaim it instead of orphaning it.
-                // It keeps its first-seen sourceApp too, so a re-copy from Momo's panel
-                // (seen while focus goes back to another app) can't change it.
+                // It keeps its first-seen sourceApp and first copy time too, so a re-copy from
+                // Momo's panel (seen while focus goes back to another app) can't change them.
                 if item.kind == .image { removeBlob(item.imagePath) }
             } else {
                 try db.execute(sql: """
-                    INSERT INTO items (id, kind, preview, text, imagePath, filePaths, createdAt, pinned, contentHash, imageBytes, sourceApp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO items (id, kind, preview, text, imagePath, filePaths, createdAt, pinned, contentHash, imageBytes,
+                                       sourceApp, sourceAppBundleID, firstCopiedAt, copyCount)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, arguments: [
                         item.id.uuidString, item.kind.rawValue, item.preview, item.text,
                         item.imagePath, item.filePaths.joined(separator: "\n"),
                         item.createdAt.timeIntervalSince1970, item.pinned ? 1 : 0,
-                        item.contentHash, imageBytesFor(item), item.sourceApp,
+                        item.contentHash, imageBytesFor(item),
+                        item.sourceApp?.name, item.sourceApp?.bundleID,
+                        item.firstCopiedAt?.timeIntervalSince1970, item.copyCount,
                     ])
             }
         }
@@ -203,7 +217,9 @@ public final class Store {
             createdAt: Date(timeIntervalSince1970: row["createdAt"]),
             pinned: (row["pinned"] as Int) == 1,
             contentHash: row["contentHash"],
-            sourceApp: row["sourceApp"]
+            sourceApp: (row["sourceApp"] as String?).map { SourceApp(name: $0, bundleID: row["sourceAppBundleID"]) },
+            firstCopiedAt: (row["firstCopiedAt"] as Double?).map { Date(timeIntervalSince1970: $0) },
+            copyCount: row["copyCount"]
         )
     }
 }
