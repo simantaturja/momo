@@ -17,6 +17,12 @@ final class CopyDetailsTests: XCTestCase {
                        String(repeating: "a", count: CopyDetails.contentLimit) + "…")
     }
 
+    func testContentOfAManyLineTextClipKeepsItsFirstLines() {
+        let lines = (1...12).map { "line \($0)" }
+        XCTAssertEqual(CopyDetails.content(of: item(.text, text: lines.joined(separator: "\r\n"))),
+                       lines.prefix(CopyDetails.maxLines).joined(separator: "\n") + "…")
+    }
+
     func testContentOfAFileClipListsItsPathsUpToALimit() {
         let paths = (1...7).map { NSHomeDirectory() + "/f\($0).txt" }
         XCTAssertEqual(CopyDetails.content(of: item(.file, files: paths)),
