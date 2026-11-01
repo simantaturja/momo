@@ -117,10 +117,11 @@ final class CopyCard {
         let iconSpace = hasIcon ? Self.iconSize + 4 : 0
         let appRowWidth = showsApp ? labelSize.width + 4 + iconSpace + nameSize.width : 0
 
-        // As wide as the widest line, up to the cap; long text wraps at the cap.
+        // As wide as the widest line, up to the cap (long text wraps at it), plus 2pt of slack so
+        // no line re-wraps when drawn.
         let width = ceil(min(Self.maxTextWidth, max(textSize(contentLabel, width: Self.maxTextWidth).width,
                                                     textSize(factsLabel, width: Self.maxTextWidth).width,
-                                                    appRowWidth)))
+                                                    appRowWidth))) + 2
         let x = Self.inset.width
         var y = Self.inset.height
 
@@ -134,13 +135,13 @@ final class CopyCard {
         if showsApp {
             let rowHeight = ceil(max(labelSize.height, nameSize.height, hasIcon ? Self.iconSize : 0))
             y += 2
-            appLabel.frame = NSRect(x: x, y: y + (rowHeight - labelSize.height) / 2,
+            appLabel.frame = NSRect(x: x, y: y + round((rowHeight - labelSize.height) / 2),
                                     width: labelSize.width, height: labelSize.height)
             let iconX = x + labelSize.width + 4
-            appIcon.frame = NSRect(x: iconX, y: y + (rowHeight - Self.iconSize) / 2,
+            appIcon.frame = NSRect(x: iconX, y: y + round((rowHeight - Self.iconSize) / 2),
                                    width: Self.iconSize, height: Self.iconSize)
             let nameX = iconX + iconSpace
-            appName.frame = NSRect(x: nameX, y: y + (rowHeight - nameSize.height) / 2,
+            appName.frame = NSRect(x: nameX, y: y + round((rowHeight - nameSize.height) / 2),
                                    width: max(0, min(nameSize.width, x + width - nameX)), height: nameSize.height)
             y += rowHeight
         }

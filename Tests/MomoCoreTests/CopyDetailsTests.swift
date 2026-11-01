@@ -21,6 +21,8 @@ final class CopyDetailsTests: XCTestCase {
         let lines = (1...12).map { "line \($0)" }
         XCTAssertEqual(CopyDetails.content(of: item(.text, text: lines.joined(separator: "\r\n"))),
                        lines.prefix(CopyDetails.maxLines).joined(separator: "\n") + "…")
+        let exactlyMax = lines.prefix(CopyDetails.maxLines).joined(separator: "\n")
+        XCTAssertEqual(CopyDetails.content(of: item(.text, text: exactlyMax)), exactlyMax)   // nothing cut
     }
 
     func testContentOfAFileClipListsItsPathsUpToALimit() {
