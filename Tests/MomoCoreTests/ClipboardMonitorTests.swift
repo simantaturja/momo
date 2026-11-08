@@ -327,14 +327,56 @@ final class ClipboardMonitorTests: XCTestCase {
     }
 
     func testDroppedCopiesNeverWriteABlob() {
-        // Every rule that drops an image is checked before its blob is written.
+        // Every rule that drops an image copy is checked before its blob is written.
+        let scenarios: [(name: String, rules: CaptureRules, paused: Bool, ignoreNext: Bool)] = [
+            ("ignored app", CaptureRules(ignoredBundleIDs: ["com.apple.Safari"]), false, false),
+            ("ignored type", CaptureRules(ignoredTypes: ["public.png"]), false, false),
+            ("paused", CaptureRules(), true, false),
+            ("ignore next", CaptureRules(), false, true),
+        ]
+        for scenario in scenarios {
+            let pb = FakePasteboard()
+            var blobsWritten = 0
+            let (monitor, captured) = watching(pb, rules: scenario.rules,
+                                               blobs: { _ in blobsWritten += 1; return "x.png" },
+                                               isPaused: { scenario.paused },
+                                               consumeIgnoreNext: { scenario.ignoreNext })
+            pb.types = ["public.png"]
+            pb.imageBytes = Data([0x1]); pb.changeCount = 1; monitor.poll(now: Date())
+            XCTAssertEqual(captured().count, 0, scenario.name)
+            XCTAssertEqual(blobsWritten, 0, scenario.name)
+        }
+    }
+
+    func testIgnoreNextIsNotUsedUpByACopyThatIsDroppedAnyway() {
+        // The skip is for the next copy that would be saved: one a rule drops doesn't count.
         let pb = FakePasteboard()
-        var blobsWritten = 0
-        let (monitor, captured) = watching(pb, rules: CaptureRules(ignoredBundleIDs: ["com.apple.Safari"]),
-                                           blobs: { _ in blobsWritten += 1; return "x.png" })
-        pb.imageBytes = Data([0x1]); pb.changeCount = 1; monitor.poll(now: Date())
-        XCTAssertEqual(captured().count, 0)
-        XCTAssertEqual(blobsWritten, 0)
+        var ignoreNext = true
+        let rules = CaptureRules(saveFiles: false, ignoredBundleIDs: ["com.apple.Safari"],
+                                 ignoredTypes: ["com.example.secret"])
+        var front: SourceApp? = SourceApp(name: "Notes", bundleID: "com.apple.Notes")
+        let monitor = ClipboardMonitor(pasteboard: pb, writeImageBlob: { _ in "x.png" },
+                                       sourceApp: { front }, rules: { rules },
+                                       consumeIgnoreNext: {
+                                           defer { ignoreNext = false }
+                                           return ignoreNext
+                                       })
+        var captured: [String?] = []
+        monitor.onNewItem = { captured.append($0.text) }
+        monitor.poll(now: Date())   // launch
+        pb.types = ["public.utf8-plain-text", "org.nspasteboard.TransientType"]
+        pb.stringValue = "transient"; pb.changeCount = 1; monitor.poll(now: Date())
+        pb.types = ["public.utf8-plain-text", "com.example.secret"]
+        pb.stringValue = "ignored type"; pb.changeCount = 2; monitor.poll(now: Date())
+        pb.types = ["public.utf8-plain-text"]
+        front = SourceApp(name: "Safari", bundleID: "com.apple.Safari")
+        pb.stringValue = "ignored app"; pb.changeCount = 3; monitor.poll(now: Date())
+        front = SourceApp(name: "Notes", bundleID: "com.apple.Notes")
+        pb.fileURLValues = ["/tmp/a.txt"]; pb.changeCount = 4; monitor.poll(now: Date())   // files off
+        pb.fileURLValues = []
+        pb.stringValue = "skipped"; pb.changeCount = 5; monitor.poll(now: Date())
+        pb.stringValue = "kept"; pb.changeCount = 6; monitor.poll(now: Date())
+        XCTAssertEqual(captured, ["kept"])
     }
 
     func testTextMatchingAnIgnoredPatternIsDropped() {

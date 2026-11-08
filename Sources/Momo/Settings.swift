@@ -76,7 +76,10 @@ struct Settings {
         get { flag("showRecentCopyInMenuBar") }
         set { write(newValue, "showRecentCopyInMenuBar") }
     }
-    static var showFooter: Bool { get { flag("showFooter", default: true) } set { write(newValue, "showFooter") } }
+    static var showKeyboardHints: Bool {
+        get { flag("showKeyboardHints", default: true) }
+        set { write(newValue, "showKeyboardHints") }
+    }
 
     // MARK: Ignore
 
@@ -108,8 +111,12 @@ struct Settings {
     // MARK: Advanced
 
     /// Pause: also settable from Terminal (`defaults write me.momo.app ignoreEvents true`), so it's
-    /// read on every check rather than cached.
-    static var ignoreEvents: Bool { get { flag("ignoreEvents") } set { write(newValue, "ignoreEvents") } }
+    /// read on every check rather than cached. AppDelegate's KVO observer posts `didChange` for
+    /// every change to it, in-app or not, so the setter doesn't.
+    static var ignoreEvents: Bool {
+        get { flag("ignoreEvents") }
+        set { d.set(newValue, forKey: "ignoreEvents") }
+    }
     static var ignoreOnlyNextEvent: Bool {
         get { flag("ignoreOnlyNextEvent") }
         set { write(newValue, "ignoreOnlyNextEvent") }
@@ -120,12 +127,9 @@ struct Settings {
         d.set(false, forKey: "ignoreOnlyNextEvent")
         return true
     }
+    /// Clears unpinned history and the system clipboard on quit.
     static var clearHistoryOnQuit: Bool {
         get { flag("clearHistoryOnQuit") }
         set { write(newValue, "clearHistoryOnQuit") }
-    }
-    static var clearSystemClipboardOnQuit: Bool {
-        get { flag("clearSystemClipboardOnQuit") }
-        set { write(newValue, "clearSystemClipboardOnQuit") }
     }
 }
