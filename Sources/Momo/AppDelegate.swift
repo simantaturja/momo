@@ -84,7 +84,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         guard Settings.clearHistoryOnQuit, let coordinator = coordinator else { return }
         coordinator.deleteUnpinnedNow()
-        if Settings.clearSystemClipboardOnQuit { NSPasteboard.general.clearContents() }
+        // Else the last copy is still on the clipboard and comes back as the launch clip.
+        NSPasteboard.general.clearContents()
     }
 
     @objc private func openSettings() {

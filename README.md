@@ -12,7 +12,7 @@ Native Swift + AppKit. No Electron. No lag. No telemetry.
 ![Platform](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange?logo=swift)
 ![UI](https://img.shields.io/badge/UI-AppKit-blue)
-![Tests](https://img.shields.io/badge/tests-136%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-137%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
 </div>
@@ -114,12 +114,12 @@ Opening Momo again (e.g. from Spotlight) also opens Settings.
   disk the history uses), and the sort order: last copy, first copy, or number of copies.
 - **Appearance** — open the panel at the menu bar icon, the mouse pointer or the screen center;
   pins at the top or bottom; how search matches are highlighted; show the latest copy next to
-  the menu bar icon; show the footer.
+  the menu bar icon; show the keyboard hints along the bottom of the panel.
 - **Pins** — give pinned items a title (shown and searched instead of the content) and edit
   pinned text.
 - **Ignore** — skip copies from chosen apps (or from all but chosen apps), copies carrying
   given pasteboard types, and text matching regular expressions.
-- **Advanced** — pause Momo; clear unpinned history (and optionally the clipboard) on quit.
+- **Advanced** — pause Momo; clear unpinned history (and the system clipboard) on quit.
 
 Pausing also works from Terminal:
 
@@ -232,7 +232,7 @@ untestable-by-design adapters (menu bar, panel, hotkey, keystroke synthesis).
 ```sh
 swift build            # compile everything
 swift run Momo         # launch the app
-swift test             # run the MomoCore suite (136 tests)
+swift test             # run the MomoCore suite (137 tests)
 ```
 
 Core behavior is developed test-first — dedupe, pruning (count / byte-cap / age-out),

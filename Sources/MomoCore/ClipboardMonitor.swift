@@ -14,8 +14,8 @@ public final class ClipboardMonitor {
 
     /// `allowsConcealed`, `rules` and `isPaused` are asked on every capture, so a settings change
     /// applies to the next copy. `sourceApp` names the app in front when a copy is seen;
-    /// `consumeIgnoreNext` says whether to drop it (and clears the request). Neither is asked for
-    /// the clip found at launch or for Momo's own copies.
+    /// `consumeIgnoreNext` says whether to drop it (and clears the request); it's asked only for a
+    /// copy no other rule drops. Neither is asked for the clip found at launch or for Momo's own copies.
     public init(pasteboard: PasteboardReading, writeImageBlob: @escaping (Data) throws -> String,
                 allowsConcealed: @escaping () -> Bool = { false },
                 sourceApp: @escaping () -> SourceApp? = { nil },
@@ -43,7 +43,6 @@ public final class ClipboardMonitor {
 
         let types = pasteboard.types
         let own = types.contains(Self.ownCopyType)
-        if sawTheCopy && !own && consumeIgnoreNext() { return }
         guard PrivacyFilter.shouldStore(pasteboardTypes: types,
                                         allowConcealed: allowsConcealed()) else { return }
         let rules = self.rules()
@@ -51,7 +50,10 @@ public final class ClipboardMonitor {
         // Asked before building the item: saving a big image takes a while, and the user may switch apps.
         let source = sawTheCopy && !own ? sourceApp() : nil
         guard own || rules.allows(sourceBundleID: source?.bundleID) else { return }
-        guard var item = buildItem(now: now, rules: rules) else { return }
+        guard let content = readContent(rules: rules) else { return }
+        // Only a copy that would otherwise be saved uses up the skip; asked before an image blob is written.
+        if sawTheCopy && !own && consumeIgnoreNext() { return }
+        guard var item = buildItem(content, now: now) else { return }
         item.sourceApp = source
         if sawTheCopy {   // Momo's own copies count too: it saw them happen
             item.firstCopiedAt = now
@@ -60,30 +62,39 @@ public final class ClipboardMonitor {
         onNewItem?(item)
     }
 
+    private enum Content {
+        case files([String]), image(Data), text(String)
+    }
+
     /// The kind is files, else an image, else text; a kind the rules turn off drops the copy
-    /// rather than falling back to another of its representations.
-    private func buildItem(now: Date, rules: CaptureRules) -> ClipboardItem? {
+    /// rather than falling back to another of its representations. So does text matching a pattern.
+    private func readContent(rules: CaptureRules) -> Content? {
         let files = pasteboard.fileURLs()
-        if !files.isEmpty {
-            guard rules.saveFiles else { return nil }
+        if !files.isEmpty { return rules.saveFiles ? .files(files) : nil }
+        if let data = pasteboard.imageData() { return rules.saveImages ? .image(data) : nil }
+        guard rules.saveText, let s = pasteboard.string(),
+              !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, rules.allows(text: s) else { return nil }
+        return .text(s)
+    }
+
+    private func buildItem(_ content: Content, now: Date) -> ClipboardItem? {
+        switch content {
+        case .files(let files):
             let preview = files.map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")
             return ClipboardItem(kind: .file, preview: preview, text: nil,
                                  imagePath: nil, filePaths: files, createdAt: now, pinned: false,
                                  contentHash: ClipboardItem.contentHash(kind: .file, text: nil, imageHash: nil, filePaths: files))
-        }
-        if let data = pasteboard.imageData() {
-            guard rules.saveImages else { return nil }   // checked before the blob is written: no orphan
+        case .image(let data):
             // Identity is the image bytes; the blob filename is incidental and must not enter the hash.
             let imageHash = ClipboardItem.imageHash(data)
             guard let path = try? writeImageBlob(data) else { return nil }
             return ClipboardItem(kind: .image, preview: "Image", text: nil,
                                  imagePath: path, filePaths: [], createdAt: now, pinned: false,
                                  contentHash: ClipboardItem.contentHash(kind: .image, text: nil, imageHash: imageHash, filePaths: []))
+        case .text(let s):
+            return ClipboardItem(kind: .text, preview: ClipboardItem.textPreview(s), text: s,
+                                 imagePath: nil, filePaths: [], createdAt: now, pinned: false,
+                                 contentHash: ClipboardItem.contentHash(kind: .text, text: s, imageHash: nil, filePaths: []))
         }
-        guard rules.saveText, let s = pasteboard.string(),
-              !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, rules.allows(text: s) else { return nil }
-        return ClipboardItem(kind: .text, preview: ClipboardItem.textPreview(s), text: s,
-                             imagePath: nil, filePaths: [], createdAt: now, pinned: false,
-                             contentHash: ClipboardItem.contentHash(kind: .text, text: s, imageHash: nil, filePaths: []))
     }
 }

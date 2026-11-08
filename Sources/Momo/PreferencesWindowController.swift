@@ -219,6 +219,7 @@ private final class StoragePane: Pane {
         stepper.minValue = 10
         stepper.maxValue = 100_000
         stepper.increment = 100
+        stepper.valueWraps = false   // wrapping past the max would drop the cap to the min and prune
         bind(field) { Settings.maxItems = $0.integerValue }
         bind(stepper) { Settings.maxItems = $0.integerValue }
         onRefresh {
@@ -273,8 +274,8 @@ private final class AppearancePane: Pane {
                                          get: { Settings.highlightMatches }, set: { Settings.highlightMatches = $0 })),
             ("", checkbox("Show the latest copy next to the menu bar icon",
                           get: { Settings.showRecentCopyInMenuBar }, set: { Settings.showRecentCopyInMenuBar = $0 })),
-            ("", checkbox("Show the footer (key hints and actions)",
-                          get: { Settings.showFooter }, set: { Settings.showFooter = $0 })),
+            ("", checkbox("Show keyboard hints",
+                          get: { Settings.showKeyboardHints }, set: { Settings.showKeyboardHints = $0 })),
         ])
     }
 }
@@ -345,12 +346,15 @@ private final class PinsPane: Pane, NSTableViewDataSource, NSTableViewDelegate {
         let item = pins[row]
         if tableColumn?.identifier == Self.titleColumn {
             guard value != (item.title ?? "") else { return }
-            coordinator.edit({ try $0.setTitle(id: item.id, title: value); return true }) { _ in }
+            coordinator.edit({ try $0.setTitle(id: item.id, title: value); return true }, done: Self.beepUnlessSaved)
         } else if value != item.text {
-            coordinator.edit({ try $0.updateText(id: item.id, text: value) }) { ok in
-                if !ok { NSSound.beep() }   // blank, or what another item already holds: left as it was
-            }
+            // Refused when blank or what another item already holds: left as it was.
+            coordinator.edit({ try $0.updateText(id: item.id, text: value) }, done: Self.beepUnlessSaved)
         }
+    }
+
+    private static func beepUnlessSaved(_ ok: Bool) {
+        if !ok { NSSound.beep() }
     }
 }
 
@@ -486,11 +490,9 @@ private final class AdvancedPane: Pane {
         separator.boxType = .separator
         let clearHistory = checkbox("Clear history when Momo quits",
                                     get: { Settings.clearHistoryOnQuit }, set: { Settings.clearHistoryOnQuit = $0 })
-        let clearClipboard = checkbox("Clear the system clipboard too",
-                                      get: { Settings.clearSystemClipboardOnQuit },
-                                      set: { Settings.clearSystemClipboardOnQuit = $0 })
-        onRefresh { clearClipboard.isEnabled = Settings.clearHistoryOnQuit }
-        let stack = column([pause, help, separator, clearHistory, caption("Pinned items are kept."), clearClipboard],
+        let stack = column([pause, help, separator, clearHistory,
+                            caption("Pinned items are kept. The system clipboard is cleared too, so the last copy "
+                                    + "doesn't come back when Momo next starts.")],
                            spacing: 8)
         separator.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         return stack

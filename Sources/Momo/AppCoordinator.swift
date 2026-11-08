@@ -70,9 +70,7 @@ final class AppCoordinator {
            rules: { Settings.captureRules }, isPaused: { Settings.ignoreEvents },
            consumeIgnoreNext: Settings.consumeIgnoreNext)
 
-        index.sort = Settings.sortBy
-        index.pinPlacement = Settings.pinsAt
-        index.replaceAll((try? store.recent(limit: Settings.maxItems)) ?? [])
+        index.replaceAll((try? store.recent(limit: Settings.maxItems)) ?? [])   // ordered by applySettings()
         monitor.onNewItem = { [weak self] item in
             guard let self else { return }
             do {
@@ -121,7 +119,7 @@ final class AppCoordinator {
         index.pinPlacement = Settings.pinsAt
         panel.popupAt = Settings.popupAt
         historyView.highlight = Settings.highlightMatches
-        historyView.showsFooter = Settings.showFooter
+        historyView.showsHints = Settings.showKeyboardHints
         historyView.reload(preserveSelection: true)
         pollQueue.async { self.runPrune() }   // maxItems may have dropped
     }
@@ -133,9 +131,13 @@ final class AppCoordinator {
         }
     }
 
-    /// Clear-on-quit: runs before returning, since the app exits right after.
+    /// Clear-on-quit: stops watching the clipboard first, so no copy lands after the delete, and
+    /// finishes before returning, since the app exits right after.
     func deleteUnpinnedNow() {
-        pollQueue.sync { _ = try? store.deleteUnpinned() }
+        pollTimer?.cancel()
+        pollQueue.sync {
+            do { try store.deleteUnpinned() } catch { NSLog("Momo: failed to clear history on quit: \(error)") }
+        }
     }
 
     /// Runs a Store edit on the poll queue, reloads the index, then reports on main whether it took.
