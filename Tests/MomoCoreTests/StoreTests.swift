@@ -311,6 +311,83 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(recent.map(\.copyCount), [1, nil])
     }
 
+    // MARK: Titles and edits
+
+    func testTitleRoundTripsAndSurvivesARecopy() throws {
+        let store = try makeStore()
+        let item = textItem("a", at: 1, pinned: true)
+        try store.upsert(item)
+        try store.setTitle(id: item.id, title: "Greeting")
+        try store.upsert(seenCopy("a", at: 2))   // arrives untitled and unpinned
+        let recent = try store.recent(limit: 10)
+        XCTAssertEqual(recent.map(\.title), ["Greeting"])
+        XCTAssertEqual(recent.map(\.pinned), [true])
+    }
+
+    func testSetTitleTrimsAndClearsWhenBlank() throws {
+        let store = try makeStore()
+        let item = textItem("a", at: 1)
+        try store.upsert(item)
+        try store.setTitle(id: item.id, title: "  Greeting \n")
+        XCTAssertEqual(try store.recent(limit: 10).map(\.title), ["Greeting"])
+        try store.setTitle(id: item.id, title: " \n ")
+        XCTAssertEqual(try store.recent(limit: 10).map(\.title), [nil])
+    }
+
+    func testUpdateTextChangesTheTextPreviewAndDedupeKey() throws {
+        let store = try makeStore()
+        let item = textItem("old", at: 1)
+        try store.upsert(item)
+        XCTAssertTrue(try store.updateText(id: item.id, text: "  new\ntext "))
+        let edited = try XCTUnwrap(try store.recent(limit: 10).first)
+        XCTAssertEqual(edited.id, item.id)
+        XCTAssertEqual(edited.text, "  new\ntext ")
+        XCTAssertEqual(edited.preview, ClipboardItem.textPreview("  new\ntext "))
+        XCTAssertEqual(edited.preview, "new\ntext")
+        // The new content is what dedupes now: copying it again bumps the edited row...
+        try store.upsert(seenCopy("  new\ntext ", at: 2))
+        XCTAssertEqual(try store.recent(limit: 10).map(\.id), [item.id])
+        // ...and the old content is new again.
+        try store.upsert(seenCopy("old", at: 3))
+        XCTAssertEqual(try store.recent(limit: 10).map(\.text), ["old", "  new\ntext "])
+    }
+
+    func testUpdateTextRefusesContentAnotherItemHasAndChangesNothing() throws {
+        let store = try makeStore()
+        let a = textItem("a", at: 2), b = textItem("b", at: 1)
+        try store.upsert(a); try store.upsert(b)
+        let before = try store.recent(limit: 10)
+        XCTAssertFalse(try store.updateText(id: a.id, text: "b"))
+        XCTAssertEqual(try store.recent(limit: 10), before)
+    }
+
+    func testUpdateTextRefusesBlankTextAndNonTextItems() throws {
+        let store = try makeStore()
+        let text = textItem("a", at: 2)
+        let image = imageItem(path: "p.png", hash: "img", at: 1)
+        try store.upsert(text); try store.upsert(image)
+        let before = try store.recent(limit: 10)
+        XCTAssertFalse(try store.updateText(id: text.id, text: " \n"))
+        XCTAssertFalse(try store.updateText(id: image.id, text: "words"))
+        XCTAssertFalse(try store.updateText(id: UUID(), text: "words"))   // gone
+        XCTAssertEqual(try store.recent(limit: 10), before)
+    }
+
+    func testDeleteUnpinnedKeepsPinsAndRemovesTheRestWithTheirBlobs() throws {
+        let (store, dir) = try makeStoreWithDir()
+        let unpinnedBlob = try store.writeImageBlob(Data(count: 8))
+        let pinnedBlob = try store.writeImageBlob(Data(count: 8))
+        try store.upsert(imageItem(path: unpinnedBlob, hash: "u", at: 1))
+        try store.upsert(imageItem(path: pinnedBlob, hash: "p", at: 2, pinned: true, preview: "pinned image"))
+        try store.upsert(textItem("text", at: 3))
+        try store.upsert(textItem("pinned text", at: 4, pinned: true))
+        XCTAssertEqual(try store.deleteUnpinned(), 2)
+        XCTAssertEqual(Set(try store.recent(limit: 10).map(\.preview)), ["pinned image", "pinned text"])
+        XCTAssertFalse(exists(dir, unpinnedBlob))
+        XCTAssertTrue(exists(dir, pinnedBlob))
+        XCTAssertEqual(try store.deleteUnpinned(), 0)
+    }
+
     private func runSQL(at path: String, _ sql: String) throws {
         var db: OpaquePointer?
         defer { sqlite3_close(db) }

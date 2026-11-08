@@ -234,4 +234,90 @@ final class HistoryIndexTests: XCTestCase {
         idx.replaceAll([fileItem(["/a.txt", "/b.zip"], at: 1)])
         XCTAssertEqual(idx.distinctFileExtensions(), ["txt", "zip"])
     }
+
+    // MARK: Order
+
+    /// An item with a known copy history.
+    private func copied(_ s: String, first: TimeInterval, last: TimeInterval, count: Int?,
+                        pinned: Bool = false) -> ClipboardItem {
+        var copied = item(s, at: last, pinned: pinned)
+        copied.firstCopiedAt = Date(timeIntervalSince1970: first)
+        copied.copyCount = count
+        return copied
+    }
+
+    func testRowsAreOrderedByTheSortKeyWithPinsOnTop() {
+        let idx = HistoryIndex()
+        // Given out of order on purpose: the index orders them itself.
+        idx.replaceAll([copied("c", first: 3, last: 3, count: 1),
+                        copied("a", first: 1, last: 9, count: 5),
+                        copied("pin", first: 0, last: 0, count: 1, pinned: true),
+                        copied("b", first: 2, last: 5, count: 2)])
+        XCTAssertEqual(idx.search("").map(\.item.preview), ["pin", "a", "b", "c"])   // last copy, the default
+        idx.sort = .firstCopy
+        XCTAssertEqual(idx.search("").map(\.item.preview), ["pin", "c", "b", "a"])
+        idx.sort = .copyCount
+        XCTAssertEqual(idx.search("").map(\.item.preview), ["pin", "a", "b", "c"])
+    }
+
+    func testFirstCopySortFallsBackToTheLastCopyWhenUnknown() {
+        let idx = HistoryIndex()
+        idx.sort = .firstCopy
+        idx.replaceAll([copied("known", first: 1, last: 10, count: 2), item("unknown", at: 5)])
+        XCTAssertEqual(idx.search("").map(\.item.preview), ["unknown", "known"])
+    }
+
+    func testCopyCountSortCountsUnknownAsOneAndBreaksTiesByLastCopy() {
+        let idx = HistoryIndex()
+        idx.sort = .copyCount
+        idx.replaceAll([copied("once", first: 1, last: 1, count: 1), item("unknown", at: 2),
+                        copied("twice", first: 0, last: 0, count: 2)])
+        XCTAssertEqual(idx.search("").map(\.item.preview), ["twice", "unknown", "once"])
+    }
+
+    func testPinsCanGoAtTheBottomForEmptyAndNonEmptyQueries() {
+        let idx = HistoryIndex()
+        idx.pinPlacement = .bottom
+        idx.replaceAll([item("gitpin", at: 3, pinned: true), item("gitlab", at: 2), item("github", at: 1)])
+        XCTAssertEqual(idx.search("").map(\.item.preview), ["gitlab", "github", "gitpin"])
+        XCTAssertEqual(idx.search("git").map(\.item.preview), ["gitlab", "github", "gitpin"])
+        idx.pinPlacement = .top
+        XCTAssertEqual(idx.search("").map(\.item.preview), ["gitpin", "gitlab", "github"])
+        XCTAssertEqual(idx.search("git").map(\.item.preview), ["gitpin", "gitlab", "github"])
+    }
+
+    func testPrependPlacesTheCopyByTheCurrentOrder() {
+        let idx = HistoryIndex()
+        idx.sort = .copyCount
+        idx.replaceAll([copied("a", first: 1, last: 1, count: 3), copied("pin", first: 0, last: 0, count: 1, pinned: true)])
+        idx.prepend(seenCopy("new", at: 5))   // copied once: below "a", which has 3
+        XCTAssertEqual(idx.search("").map(\.item.preview), ["pin", "a", "new"])
+        idx.prepend(seenCopy("new", at: 6))
+        idx.prepend(seenCopy("new", at: 7))   // now 3 copies, and the more recent of the tie
+        XCTAssertEqual(idx.search("").map(\.item.preview), ["pin", "new", "a"])
+    }
+
+    // MARK: Titles
+
+    func testATitleIsTheLineShownAndSearched() {
+        var titled = item("ssh -i ~/.ssh/key admin@10.0.0.1", at: 2)
+        titled.title = "Prod\nserver"
+        var blank = item("untitled text", at: 1)
+        blank.title = "  "
+        let idx = HistoryIndex()
+        idx.replaceAll([titled, blank])
+        XCTAssertEqual(idx.search("").map(\.line), ["Prod server", "untitled text"])
+        XCTAssertEqual(idx.search("prod").map(\.item.id), [titled.id])
+        XCTAssertEqual(idx.search("admin").map(\.item.id), [], "a titled item is found by its title")
+    }
+
+    func testPrependKeepsTheTitleOfTheItemItDedupes() {
+        var titled = item("a", at: 1, pinned: true)
+        titled.title = "Greeting"
+        let idx = HistoryIndex()
+        idx.replaceAll([titled])
+        idx.prepend(seenCopy("a", at: 2))
+        XCTAssertEqual(idx.search("").map(\.item.title), ["Greeting"])
+        XCTAssertEqual(idx.search("").map(\.line), ["Greeting"])
+    }
 }

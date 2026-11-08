@@ -145,7 +145,7 @@ final class PreviewPaneView: NSView {
                        .tertiaryLabelColor, to: text)
                 metaLabel.stringValue = "Link"
             case .color:
-                guard let color = HexColor(row.line) else { return }
+                guard let color = HexColor(row.item.preview) else { return }
                 setSwatch(color.nsColor)
                 let hsl = color.hsl
                 append("Hex  \(color.hex)\nRGB  \(color.red), \(color.green), \(color.blue)\n"

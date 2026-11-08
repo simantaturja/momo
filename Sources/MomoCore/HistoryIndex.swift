@@ -15,13 +15,27 @@ public enum HistoryScope: Equatable, Sendable {
     case all, text, links, images, files(extension: String?), pinned
 }
 
+/// What the list is ordered by, newest / most first.
+public enum HistorySort: String, Sendable {
+    case lastCopy, firstCopy, copyCount
+}
+
+public enum PinPlacement: String, Sendable {
+    case top, bottom
+}
+
 public final class HistoryIndex {
+    /// Kept in display order, so an empty query (every open) costs no sort: rows are ordered when
+    /// they change or the order does, never per keystroke.
     private var rows: [HistoryRow] = []
+
+    public var sort = HistorySort.lastCopy { didSet { rows.sort(by: precedes) } }
+    public var pinPlacement = PinPlacement.top { didSet { rows.sort(by: precedes) } }
 
     public init() {}
 
     public func replaceAll(_ items: [ClipboardItem]) {
-        rows = items.map(Self.row)
+        rows = items.map(Self.row).sorted(by: precedes)
     }
 
     public func prepend(_ item: ClipboardItem) {
@@ -32,10 +46,12 @@ public final class HistoryIndex {
                                   text: item.text, imagePath: existing.imagePath, filePaths: item.filePaths,
                                   createdAt: item.createdAt, pinned: existing.pinned, contentHash: item.contentHash,
                                   sourceApp: existing.sourceApp, firstCopiedAt: existing.firstCopiedAt,
-                                  copyCount: existing.copyCount.map { $0 + added })
+                                  copyCount: existing.copyCount.map { $0 + added }, title: existing.title)
         }
         rows.removeAll { $0.item.contentHash == item.contentHash }
-        rows.insert(Self.row(item), at: 0)
+        let row = Self.row(item)
+        let position = rows.firstIndex { precedes(row, $0) } ?? rows.count   // keeps the rows in order
+        rows.insert(row, at: position)
     }
 
     /// Fuzzy-matches against each row's `line` (what's drawn), so highlights line up.
@@ -48,10 +64,32 @@ public final class HistoryIndex {
                                matchedPositions: match.positions), match.score)
         }
         return scored.sorted { a, b in
-            if a.row.item.pinned != b.row.item.pinned { return a.row.item.pinned }
+            if let first = pinFirst(a.row.item, b.row.item) { return first }
             if a.score != b.score { return a.score > b.score }
             return a.row.item.createdAt > b.row.item.createdAt
         }.map(\.row)
+    }
+
+    /// Whether `a` goes before `b` in the list: pins per their placement, then the sort key, then the last copy.
+    private func precedes(_ a: HistoryRow, _ b: HistoryRow) -> Bool {
+        if let first = pinFirst(a.item, b.item) { return first }
+        let (keyA, keyB) = (sortKey(a.item), sortKey(b.item))
+        if keyA != keyB { return keyA > keyB }
+        return a.item.createdAt > b.item.createdAt
+    }
+
+    /// Whether `a` goes first because of pinning; nil when both or neither are pinned.
+    private func pinFirst(_ a: ClipboardItem, _ b: ClipboardItem) -> Bool? {
+        guard a.pinned != b.pinned else { return nil }
+        return a.pinned == (pinPlacement == .top)
+    }
+
+    private func sortKey(_ item: ClipboardItem) -> Double {
+        switch sort {
+        case .lastCopy: return item.createdAt.timeIntervalSince1970
+        case .firstCopy: return (item.firstCopiedAt ?? item.createdAt).timeIntervalSince1970
+        case .copyCount: return Double(item.copyCount ?? 1)
+        }
     }
 
     public func distinctFileExtensions() -> [String] {
@@ -63,9 +101,11 @@ public final class HistoryIndex {
         return Array(Set(extensions)).sorted()
     }
 
+    /// A titled item shows (and is searched by) its title instead of its preview.
     private static func row(_ item: ClipboardItem) -> HistoryRow {
-        HistoryRow(item: item, line: PreviewText.singleLine(item.preview), flavor: flavor(of: item),
-                   matchedPositions: [])
+        let title = PreviewText.singleLine(item.title ?? "")
+        return HistoryRow(item: item, line: title.isEmpty ? PreviewText.singleLine(item.preview) : title,
+                          flavor: flavor(of: item), matchedPositions: [])
     }
 
     /// Detected on the preview, which is only the first 200 characters, so a link is confirmed

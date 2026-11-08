@@ -7,6 +7,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     var onResignKey: (() -> Void)?
     /// Screen frame of the menu-bar icon; the panel drops down beneath it (centered if nil).
     var anchorFrame: (() -> NSRect?)?
+    /// Where `show()` puts the panel. Set from Settings so opening doesn't read them.
+    var popupAt = PopupPosition.menuIcon
     /// Called with `true` on show and `false` on hide, e.g. to highlight the menu-bar icon.
     var onVisibilityChange: ((Bool) -> Void)?
     private var lastResignHide = Date.distantPast
@@ -87,9 +89,27 @@ final class PanelController: NSObject, NSWindowDelegate {
         onVisibilityChange?(false)
     }
 
+    private func position() {
+        guard popupAt != .menuIcon else { return positionUnderIcon() }
+        let mouse = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ?? NSScreen.main else {
+            panel.center()
+            return
+        }
+        let visible = screen.visibleFrame
+        let size = panel.frame.size
+        if popupAt == .screenCenter {
+            panel.setFrameOrigin(NSPoint(x: visible.midX - size.width / 2, y: visible.midY - size.height / 2))
+        } else {   // top-left corner at the pointer, kept fully on its screen
+            let x = min(max(mouse.x, visible.minX), visible.maxX - size.width)
+            let y = max(min(mouse.y, visible.maxY), visible.minY + size.height)
+            panel.setFrameTopLeftPoint(NSPoint(x: x, y: y))
+        }
+    }
+
     /// Drop down from the menu-bar icon like a menu: top edge just under the bar, left edge
     /// aligned with the icon, clamped so the panel stays fully on that screen.
-    private func position() {
+    private func positionUnderIcon() {
         guard let icon = anchorFrame?(),
               let screen = NSScreen.screens.first(where: { $0.frame.contains(NSPoint(x: icon.midX, y: icon.midY)) }) else {
             panel.center()

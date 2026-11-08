@@ -52,6 +52,7 @@ final class HistoryRowView: NSTableCellView {
     private var selected = false
     private var hovered = false
     private var multiSelect = false
+    private var highlight = MatchHighlight.accent
 
     private static let uncheckedImage = NSImage(systemSymbolName: "circle", accessibilityDescription: "Select")
     private static let checkedImage = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "Deselect")
@@ -142,9 +143,10 @@ final class HistoryRowView: NSTableCellView {
 
     @objc private func checkboxClicked() { onCheckboxClick?(self) }
 
-    func configure(_ row: HistoryRow, index: Int, imagesDir: String, showQuickKey: Bool) {
+    func configure(_ row: HistoryRow, index: Int, imagesDir: String, showQuickKey: Bool, highlight: MatchHighlight) {
         current = row
         rowIndex = index
+        self.highlight = highlight
         relativeTime = RelativeTime.format(row.item.createdAt, now: Date())
         setQuickKey(showQuickKey)
         pinIcon.isHidden = !row.item.pinned
@@ -159,7 +161,7 @@ final class HistoryRowView: NSTableCellView {
             case .code: showSymbol("curlybraces")
             case .plain: showSymbol("doc.text")
             case .color:
-                if let color = HexColor(row.line) { showSwatch(color.nsColor) } else { showSymbol("doc.text") }
+                if let color = HexColor(row.item.preview) { showSwatch(color.nsColor) } else { showSymbol("doc.text") }
             }
         case .richText: showSymbol("textformat")
         case .file: showImage(Self.fileIcon(for: row.item.filePaths.first ?? ""))
@@ -205,8 +207,14 @@ final class HistoryRowView: NSTableCellView {
                               range: NSRange(location: line.length, length: (suffix as NSString).length))
         }
         let bold: NSFont = code ? .monospacedSystemFont(ofSize: 12, weight: .bold) : .boldSystemFont(ofSize: 13)
+        let match: [NSAttributedString.Key: Any]
+        switch highlight {
+        case .accent: match = [.foregroundColor: Theme.matchText, .font: bold]
+        case .bold: match = [.font: bold]
+        case .underline: match = [.underlineStyle: NSUnderlineStyle.single.rawValue]
+        }
         for range in PreviewText.highlightRanges(in: row.line, positions: row.matchedPositions) {
-            text.addAttributes([.foregroundColor: Theme.matchText, .font: bold], range: range)
+            text.addAttributes(match, range: range)
         }
         label.attributedStringValue = text
     }

@@ -9,6 +9,8 @@ final class AppCoordinator {
     private var pollTimer: DispatchSourceTimer?
     /// Called on main after a choice actually landed on the clipboard.
     var onCopied: (() -> Void)?
+    /// Posted on main after the index's items change.
+    static let historyDidChange = Notification.Name("MomoHistoryDidChange")
     private let pollQueue = DispatchQueue(label: "momo.poll", qos: .utility)
 
     // MARK: Store location
@@ -64,8 +66,12 @@ final class AppCoordinator {
         let reader = NSPasteboardReader()
         monitor = ClipboardMonitor(pasteboard: reader, writeImageBlob: { [store] data in
             try store.writeImageBlob(data)
-        }, allowsConcealed: { Settings.savePasswords }, sourceApp: Self.frontmostApp)
+        }, allowsConcealed: { Settings.savePasswords }, sourceApp: Self.frontmostApp,
+           rules: { Settings.captureRules }, isPaused: { Settings.ignoreEvents },
+           consumeIgnoreNext: Settings.consumeIgnoreNext)
 
+        index.sort = Settings.sortBy
+        index.pinPlacement = Settings.pinsAt
         index.replaceAll((try? store.recent(limit: Settings.maxItems)) ?? [])
         monitor.onNewItem = { [weak self] item in
             guard let self else { return }
@@ -78,8 +84,12 @@ final class AppCoordinator {
             DispatchQueue.main.async {
                 self.index.prepend(item)
                 self.historyView.reload(preserveSelection: true)
+                NotificationCenter.default.post(name: Self.historyDidChange, object: nil)
             }
             self.pollQueue.async { self.runPrune() }
+        }
+        _ = NotificationCenter.default.addObserver(forName: Settings.didChange, object: nil, queue: .main) { [weak self] _ in
+            self?.applySettings()
         }
 
         // Reclaim any blobs left behind by a prior crash between blob-write and row-commit.
@@ -104,6 +114,18 @@ final class AppCoordinator {
         if deleted > 0 { reloadIndexFromStore() }   // skip the refetch/reload when nothing changed
     }
 
+    /// Applies the settings the shell holds: list order, panel placement and look, and the item cap.
+    /// Runs at launch and on every change; on main.
+    func applySettings() {
+        index.sort = Settings.sortBy
+        index.pinPlacement = Settings.pinsAt
+        panel.popupAt = Settings.popupAt
+        historyView.highlight = Settings.highlightMatches
+        historyView.showsFooter = Settings.showFooter
+        historyView.reload(preserveSelection: true)
+        pollQueue.async { self.runPrune() }   // maxItems may have dropped
+    }
+
     func clearHistory() {
         pollQueue.async {
             try? self.store.deleteAll()
@@ -111,11 +133,31 @@ final class AppCoordinator {
         }
     }
 
+    /// Clear-on-quit: runs before returning, since the app exits right after.
+    func deleteUnpinnedNow() {
+        pollQueue.sync { _ = try? store.deleteUnpinned() }
+    }
+
+    /// Runs a Store edit on the poll queue, reloads the index, then reports on main whether it took.
+    func edit(_ change: @escaping (Store) throws -> Bool, done: @escaping (Bool) -> Void) {
+        pollQueue.async {
+            let ok = (try? change(self.store)) ?? false
+            self.reloadIndexFromStore()
+            DispatchQueue.main.async { done(ok) }
+        }
+    }
+
+    /// The most recent copy, for the menu bar title.
+    var latestCopy: HistoryRow? {
+        index.search("").max { $0.item.createdAt < $1.item.createdAt }
+    }
+
     private func reloadIndexFromStore() {
         let items = (try? store.recent(limit: Settings.maxItems)) ?? []
         DispatchQueue.main.async {
             self.index.replaceAll(items)
             self.historyView.reload(preserveSelection: true)
+            NotificationCenter.default.post(name: Self.historyDidChange, object: nil)
         }
     }
 

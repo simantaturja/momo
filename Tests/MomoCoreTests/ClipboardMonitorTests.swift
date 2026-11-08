@@ -207,4 +207,152 @@ final class ClipboardMonitorTests: XCTestCase {
         pb.imageBytes = Data([0x1]); pb.changeCount = 1; monitor.poll(now: Date())
         XCTAssertEqual(captured.map(\.sourceApp?.name), ["Preview"])
     }
+
+    // MARK: Capture rules
+
+    /// A monitor that has already seen the launch clip, so the next change is a copy it saw.
+    private func watching(_ pb: FakePasteboard, rules: CaptureRules = CaptureRules(),
+                          source: SourceApp? = SourceApp(name: "Safari", bundleID: "com.apple.Safari"),
+                          blobs: @escaping (Data) throws -> String = { _ in "x.png" },
+                          isPaused: @escaping () -> Bool = { false },
+                          consumeIgnoreNext: @escaping () -> Bool = { false }) -> (ClipboardMonitor, () -> [ClipboardItem]) {
+        var captured: [ClipboardItem] = []
+        let monitor = ClipboardMonitor(pasteboard: pb, writeImageBlob: blobs, sourceApp: { source },
+                                       rules: { rules }, isPaused: isPaused, consumeIgnoreNext: consumeIgnoreNext)
+        monitor.onNewItem = { captured.append($0) }
+        monitor.poll(now: Date())   // launch: nothing on the clipboard
+        return (monitor, { captured })
+    }
+
+    func testCopiesMadeWhilePausedAreNeverCaptured() {
+        let pb = FakePasteboard()
+        var paused = true
+        var asked = 0
+        let (monitor, captured) = watching(pb, isPaused: { paused }, consumeIgnoreNext: { asked += 1; return false })
+        pb.stringValue = "while paused"; pb.changeCount = 1; monitor.poll(now: Date())
+        paused = false
+        monitor.poll(now: Date())   // unpausing doesn't pick up the copy made while paused
+        XCTAssertEqual(captured().map(\.text), [])
+        XCTAssertEqual(asked, 0, "a paused copy doesn't use up ignore-next")
+        pb.stringValue = "after"; pb.changeCount = 2; monitor.poll(now: Date())
+        XCTAssertEqual(captured().map(\.text), ["after"])
+    }
+
+    func testIgnoreNextDropsOnlyTheNextSeenCopyThatIsNotMomos() {
+        let pb = FakePasteboard()
+        pb.stringValue = "launch clip"; pb.changeCount = 1
+        var ignoreNext = true
+        var asked = 0
+        let monitor = ClipboardMonitor(pasteboard: pb, writeImageBlob: { _ in "x.png" },
+                                       consumeIgnoreNext: {
+                                           asked += 1
+                                           defer { ignoreNext = false }   // read-and-clear, as Settings does
+                                           return ignoreNext
+                                       })
+        var captured: [String?] = []
+        monitor.onNewItem = { captured.append($0.text) }
+        monitor.poll(now: Date())   // the launch clip: not a copy Momo saw, so not asked
+        pb.stringValue = "own"; pb.types = ["public.utf8-plain-text", ClipboardMonitor.ownCopyType]
+        pb.changeCount = 2; monitor.poll(now: Date())   // Momo's own copy: not asked either
+        XCTAssertEqual(asked, 0)
+        pb.types = ["public.utf8-plain-text"]
+        pb.stringValue = "ignored"; pb.changeCount = 3; monitor.poll(now: Date())
+        pb.stringValue = "kept"; pb.changeCount = 4; monitor.poll(now: Date())
+        XCTAssertEqual(captured, ["launch clip", "own", "kept"])
+        XCTAssertEqual(asked, 2)
+    }
+
+    func testIgnoredPasteboardTypeDropsTheCopy() {
+        let pb = FakePasteboard()
+        let (monitor, captured) = watching(pb, rules: CaptureRules(ignoredTypes: ["com.example.secret"]))
+        pb.stringValue = "a"; pb.types = ["public.utf8-plain-text", "com.example.secret"]
+        pb.changeCount = 1; monitor.poll(now: Date())
+        pb.stringValue = "b"; pb.types = ["public.utf8-plain-text"]
+        pb.changeCount = 2; monitor.poll(now: Date())
+        XCTAssertEqual(captured().map(\.text), ["b"])
+    }
+
+    func testCopiesFromAnIgnoredAppAreDroppedButMomosOwnAreKept() {
+        let pb = FakePasteboard()
+        let (monitor, captured) = watching(pb, rules: CaptureRules(ignoredBundleIDs: ["com.apple.Safari"]))
+        pb.stringValue = "from Safari"; pb.changeCount = 1; monitor.poll(now: Date())
+        pb.stringValue = "own"; pb.types = ["public.utf8-plain-text", ClipboardMonitor.ownCopyType]
+        pb.changeCount = 2; monitor.poll(now: Date())   // Safari is in front, but Momo made this copy
+        XCTAssertEqual(captured().map(\.text), ["own"])
+    }
+
+    func testOnlyListedAppsKeepsCopiesFromListedAppsAndMomoOnly() {
+        let rules = CaptureRules(ignoredBundleIDs: ["com.apple.Notes"], onlyListedApps: true)
+        let pb = FakePasteboard()
+        pb.stringValue = "launch clip"; pb.changeCount = 1   // unknown source: dropped in this mode
+        var front: SourceApp? = SourceApp(name: "Safari", bundleID: "com.apple.Safari")
+        let monitor = ClipboardMonitor(pasteboard: pb, writeImageBlob: { _ in "x.png" },
+                                       sourceApp: { front }, rules: { rules })
+        var captured: [String?] = []
+        monitor.onNewItem = { captured.append($0.text) }
+        monitor.poll(now: Date())
+        pb.stringValue = "from Safari"; pb.changeCount = 2; monitor.poll(now: Date())
+        front = SourceApp(name: "Notes", bundleID: "com.apple.Notes")
+        pb.stringValue = "from Notes"; pb.changeCount = 3; monitor.poll(now: Date())
+        front = SourceApp(name: "Mystery")   // no bundle id: unknown
+        pb.stringValue = "from Mystery"; pb.changeCount = 4; monitor.poll(now: Date())
+        pb.stringValue = "own"; pb.types = ["public.utf8-plain-text", ClipboardMonitor.ownCopyType]
+        pb.changeCount = 5; monitor.poll(now: Date())
+        XCTAssertEqual(captured, ["from Notes", "own"])
+    }
+
+    func testADisabledKindDropsTheCopyRatherThanFallingBack() {
+        // Finder puts the file name on the pasteboard as text too; with files off, it isn't saved as text.
+        let pb = FakePasteboard()
+        let (monitor, captured) = watching(pb, rules: CaptureRules(saveFiles: false))
+        pb.fileURLValues = ["/tmp/a.txt"]; pb.stringValue = "a.txt"; pb.changeCount = 1; monitor.poll(now: Date())
+        pb.fileURLValues = []; pb.stringValue = "plain"; pb.changeCount = 2; monitor.poll(now: Date())
+        XCTAssertEqual(captured().map(\.text), ["plain"])
+
+        let textOff = FakePasteboard()
+        let (textMonitor, textCaptured) = watching(textOff, rules: CaptureRules(saveText: false))
+        textOff.stringValue = "plain"; textOff.changeCount = 1; textMonitor.poll(now: Date())
+        textOff.fileURLValues = ["/tmp/a.txt"]; textOff.changeCount = 2; textMonitor.poll(now: Date())
+        XCTAssertEqual(textCaptured().map(\.kind), [.file])
+    }
+
+    func testImagesOffDropsTheCopyWithoutWritingABlob() {
+        let pb = FakePasteboard()
+        var blobsWritten = 0
+        let (monitor, captured) = watching(pb, rules: CaptureRules(saveImages: false),
+                                           blobs: { _ in blobsWritten += 1; return "x.png" })
+        pb.imageBytes = Data([0x1]); pb.stringValue = "alt text"; pb.changeCount = 1; monitor.poll(now: Date())
+        XCTAssertEqual(captured().count, 0, "not saved as its text either")
+        XCTAssertEqual(blobsWritten, 0, "a dropped copy must not leave a blob behind")
+    }
+
+    func testDroppedCopiesNeverWriteABlob() {
+        // Every rule that drops an image is checked before its blob is written.
+        let pb = FakePasteboard()
+        var blobsWritten = 0
+        let (monitor, captured) = watching(pb, rules: CaptureRules(ignoredBundleIDs: ["com.apple.Safari"]),
+                                           blobs: { _ in blobsWritten += 1; return "x.png" })
+        pb.imageBytes = Data([0x1]); pb.changeCount = 1; monitor.poll(now: Date())
+        XCTAssertEqual(captured().count, 0)
+        XCTAssertEqual(blobsWritten, 0)
+    }
+
+    func testTextMatchingAnIgnoredPatternIsDropped() {
+        let pb = FakePasteboard()
+        // An invalid pattern and an empty one (a freshly added row) are skipped, not fatal or match-all.
+        let rules = CaptureRules(ignoredPatterns: ["(unclosed", "", "^sk-[A-Za-z0-9]+$", "secret"])
+        let (monitor, captured) = watching(pb, rules: rules)
+        let longPrefix = String(repeating: "x", count: 300)   // past the 200-character preview
+        for (i, text) in ["sk-abc123", "hello", longPrefix + " my secret", "sk-abc 123"].enumerated() {
+            pb.stringValue = text; pb.changeCount = i + 1; monitor.poll(now: Date())
+        }
+        XCTAssertEqual(captured().map(\.text), ["hello", "sk-abc 123"])
+    }
+
+    func testPatternsDoNotApplyToFilesOrImages() {
+        let pb = FakePasteboard()
+        let (monitor, captured) = watching(pb, rules: CaptureRules(ignoredPatterns: ["a"]))
+        pb.fileURLValues = ["/tmp/a.txt"]; pb.changeCount = 1; monitor.poll(now: Date())
+        XCTAssertEqual(captured().map(\.kind), [.file])
+    }
 }
