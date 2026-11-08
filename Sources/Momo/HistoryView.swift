@@ -90,6 +90,17 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
     private let hint = NSTextField(labelWithString: "↵ Copy   ⌘1–9 Quick copy   ○ or ⇧↑↓ Select more   ⌘P Pin   ⌘⌫ Delete")
     private let actionBar = NSStackView()
     private let copyButton = HoverButton()
+    private let footer = NSView()
+    private var footerHeight: NSLayoutConstraint!
+    /// How rows mark matched letters; set from Settings, applied on the next reload.
+    var highlight = MatchHighlight.accent
+    /// The hint / action bar along the bottom.
+    var showsFooter = true {
+        didSet {
+            footer.isHidden = !showsFooter
+            footerHeight.constant = showsFooter ? 28 : 0
+        }
+    }
     // Holding ⌘ alone swaps the first nine rows' times for their ⌘1…⌘9 quick keys.
     private var quickKeys = false
     // A row's checkbox started the current selection: every row shows its checkbox, even
@@ -199,7 +210,8 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         preview.translatesAutoresizingMaskIntoConstraints = false
 
         buildEmptyState()
-        let footer = buildFooter()
+        buildFooter()
+        footerHeight = footer.heightAnchor.constraint(equalToConstant: 28)
 
         for view in [capsule, scopeBar, topSeparator, scroll, divider, preview, emptyStack, footer] as [NSView] {
             addSubview(view)
@@ -245,7 +257,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
             footer.leadingAnchor.constraint(equalTo: leadingAnchor),
             footer.trailingAnchor.constraint(equalTo: trailingAnchor),
             footer.bottomAnchor.constraint(equalTo: bottomAnchor),
-            footer.heightAnchor.constraint(equalToConstant: 28),
+            footerHeight,
         ])
     }
 
@@ -307,8 +319,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
         emptyStack.isHidden = true
     }
 
-    private func buildFooter() -> NSView {
-        let footer = NSView()
+    private func buildFooter() {
         footer.translatesAutoresizingMaskIntoConstraints = false
         let separator = NSBox()
         separator.boxType = .separator
@@ -346,7 +357,6 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
             actionBar.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: -12),
             actionBar.centerYAnchor.constraint(equalTo: footer.centerYAnchor),
         ])
-        return footer
     }
 
     private func styleFooterButton(_ button: NSButton, title: String, color: NSColor, action: Selector) {
@@ -742,7 +752,7 @@ final class HistoryView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSS
             v.onCheckboxClick = { [weak self] cell in self?.toggleRow(of: cell) }
             return v
         }()
-        cell.configure(results[row], index: row, imagesDir: imagesDir, showQuickKey: quickKeys)
+        cell.configure(results[row], index: row, imagesDir: imagesDir, showQuickKey: quickKeys, highlight: highlight)
         cell.setMultiSelect(isChecklist)
         return cell
     }

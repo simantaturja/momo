@@ -33,11 +33,13 @@ public struct ClipboardItem: Identifiable, Equatable, Sendable {
     public var firstCopiedAt: Date?
     /// How many times the content has been copied.
     public var copyCount: Int?
+    /// A label the user gave the item, shown and searched in place of its preview.
+    public var title: String?
 
     public init(id: UUID = UUID(), kind: ItemKind, preview: String,
                 text: String?, imagePath: String?, filePaths: [String],
                 createdAt: Date, pinned: Bool, contentHash: String, sourceApp: SourceApp? = nil,
-                firstCopiedAt: Date? = nil, copyCount: Int? = nil) {
+                firstCopiedAt: Date? = nil, copyCount: Int? = nil, title: String? = nil) {
         self.id = id
         self.kind = kind
         self.preview = preview
@@ -50,6 +52,12 @@ public struct ClipboardItem: Identifiable, Equatable, Sendable {
         self.sourceApp = sourceApp
         self.firstCopiedAt = firstCopiedAt
         self.copyCount = copyCount
+        self.title = title
+    }
+
+    /// The preview stored for a text item: its trimmed text's first 200 characters.
+    public static func textPreview(_ text: String) -> String {
+        String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
     }
 
     /// True if this item passes the given kind/extension filter. `kind == nil` matches

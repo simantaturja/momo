@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let coordinator = makeCoordinator() else { NSApp.terminate(nil); return }
         self.coordinator = coordinator
         coordinator.startPolling()
+        coordinator.applySettings()
         _ = coordinator.panel  // eager pre-warm: build panel/HistoryView at launch, not on first hotkey press
         _ = CopyCard.shared    // and the hover card, which the first open's rows touch
 
@@ -32,15 +33,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.statusItem.button?.highlight(visible)
         }
         coordinator.onCopied = { [weak self] in self?.flashCopied() }
+        for name in [Settings.didChange, AppCoordinator.historyDidChange] {
+            _ = NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.updateStatusItem()
+            }
+        }
+        // Pausing also works from Terminal (`defaults write`); KVO on UserDefaults sees other processes' changes.
+        UserDefaults.standard.addObserver(self, forKeyPath: "ignoreEvents", options: [], context: nil)
+        updateStatusItem()
 
-        let login = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
-        login.state = Settings.launchAtLogin ? .on : .off
-        menu.addItem(login)
-        let passwords = NSMenuItem(title: "Save Passwords from Password Managers",
-                                   action: #selector(togglePasswords), keyEquivalent: "")
-        passwords.state = Settings.savePasswords ? .on : .off
-        passwords.toolTip = "When on, passwords you copy from 1Password and similar apps appear in your history. They're stored unencrypted on this Mac."
-        menu.addItem(passwords)
+        menu.addItem(NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ","))
         menu.addItem(NSMenuItem(title: "Clear History…", action: #selector(clearHistory), keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Momo", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
@@ -68,11 +70,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?,
+                               change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
+        // Lets open panes and the panel catch up too.
+        DispatchQueue.main.async { NotificationCenter.default.post(name: Settings.didChange, object: nil) }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openSettings()
+        return false
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        guard Settings.clearHistoryOnQuit, let coordinator = coordinator else { return }
+        coordinator.deleteUnpinnedNow()
+        if Settings.clearSystemClipboardOnQuit { NSPasteboard.general.clearContents() }
+    }
+
+    @objc private func openSettings() {
+        PreferencesWindowController.show(coordinator: coordinator)
+    }
+
+    /// Paused shows the icon dimmed; the menu bar title, when on, is the latest copy.
+    private func updateStatusItem() {
+        guard let button = statusItem?.button else { return }
+        let paused = Settings.ignoreEvents
+        button.appearsDisabled = paused
+        button.toolTip = paused ? "Momo is paused: copies aren't saved" : nil
+        if Settings.showRecentCopyInMenuBar, let line = coordinator.latestCopy?.line {
+            button.title = PreviewText.excerpt(line, limit: 20)
+            button.imagePosition = .imageLeading
+        } else {
+            button.title = ""
+            button.imagePosition = .imageOnly
+        }
+    }
+
     /// Left-click drops the history panel down from the icon; right-click (or ⌃-click)
     /// shows the app menu. The menu is attached only for that click so left-click stays ours.
+    /// ⌥-click pauses or resumes; ⌥⇧-click skips the next copy.
     @objc private func statusItemClicked() {
         let event = NSApp.currentEvent
-        if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
+        if event?.type == .leftMouseUp, let flags = event?.modifierFlags, flags.contains(.option) {
+            if flags.contains(.shift) { Settings.ignoreOnlyNextEvent = true } else { Settings.ignoreEvents.toggle() }
+        } else if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
             if coordinator.panel.panel.isVisible { coordinator.dismiss() }
             statusItem.menu = menu
             statusItem.button?.performClick(nil)
@@ -164,15 +205,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         image.isTemplate = true
         return image
-    }
-
-    @objc private func toggleLogin(_ sender: NSMenuItem) {
-        Settings.launchAtLogin.toggle()
-        sender.state = Settings.launchAtLogin ? .on : .off
-    }
-
-    @objc private func togglePasswords(_ sender: NSMenuItem) {
-        Settings.savePasswords.toggle()
-        sender.state = Settings.savePasswords ? .on : .off
     }
 }

@@ -25,21 +25,23 @@ public final class Store {
                     sourceApp TEXT,
                     sourceAppBundleID TEXT,
                     firstCopiedAt DOUBLE,
-                    copyCount INTEGER
+                    copyCount INTEGER,
+                    title TEXT
                 );
                 CREATE INDEX IF NOT EXISTS idx_items_order ON items(pinned DESC, createdAt DESC);
                 """)
-            // Databases from before the copy history existed get its columns added in place;
-            // their rows' values stay NULL (unknown).
+            // Databases from before the copy history (or titles) existed get those columns added in
+            // place; their rows' values stay NULL (unknown, untitled).
             let columns = try Set(db.columns(in: "items").map(\.name))
-            for (name, sqlType) in Self.copyHistoryColumns where !columns.contains(name) {
+            for (name, sqlType) in Self.addedColumns where !columns.contains(name) {
                 try db.execute(sql: "ALTER TABLE items ADD COLUMN \(name) \(sqlType)")
             }
         }
     }
 
-    private static let copyHistoryColumns = [
+    private static let addedColumns = [
         ("sourceApp", "TEXT"), ("sourceAppBundleID", "TEXT"), ("firstCopiedAt", "DOUBLE"), ("copyCount", "INTEGER"),
+        ("title", "TEXT"),
     ]
 
     public func upsert(_ item: ClipboardItem) throws {
@@ -56,20 +58,21 @@ public final class Store {
                 // Dedupe hit: the existing row keeps its own blob, so the just-written
                 // incoming image blob is redundant — reclaim it instead of orphaning it.
                 // It keeps its first-seen sourceApp and first copy time too, so a re-copy from
-                // Momo's panel (seen while focus goes back to another app) can't change them.
+                // Momo's panel (seen while focus goes back to another app) can't change them,
+                // and its pin and title.
                 if item.kind == .image { removeBlob(item.imagePath) }
             } else {
                 try db.execute(sql: """
                     INSERT INTO items (id, kind, preview, text, imagePath, filePaths, createdAt, pinned, contentHash, imageBytes,
-                                       sourceApp, sourceAppBundleID, firstCopiedAt, copyCount)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       sourceApp, sourceAppBundleID, firstCopiedAt, copyCount, title)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, arguments: [
                         item.id.uuidString, item.kind.rawValue, item.preview, item.text,
                         item.imagePath, item.filePaths.joined(separator: "\n"),
                         item.createdAt.timeIntervalSince1970, item.pinned ? 1 : 0,
                         item.contentHash, imageBytesFor(item),
                         item.sourceApp?.name, item.sourceApp?.bundleID,
-                        item.firstCopiedAt?.timeIntervalSince1970, item.copyCount,
+                        item.firstCopiedAt?.timeIntervalSince1970, item.copyCount, item.title,
                     ])
             }
         }
@@ -94,6 +97,32 @@ public final class Store {
         try dbQueue.write { db in
             try db.execute(sql: "UPDATE items SET pinned = ? WHERE id = ?",
                            arguments: [pinned ? 1 : 0, id.uuidString])
+        }
+    }
+
+    /// Sets the item's title; a blank one clears it.
+    public func setTitle(id: UUID, title: String?) throws {
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let value: String? = trimmed.isEmpty ? nil : trimmed
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE items SET title = ? WHERE id = ?", arguments: [value, id.uuidString])
+        }
+    }
+
+    /// Replaces a text item's text, and with it its preview and dedupe key. Returns false, changing
+    /// nothing, for blank text, an item that isn't text (or is gone), or text another item already has.
+    @discardableResult
+    public func updateText(id: UUID, text: String) throws -> Bool {
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        let hash = ClipboardItem.contentHash(kind: .text, text: text, imageHash: nil, filePaths: [])
+        return try dbQueue.write { db in
+            let kind = try String.fetchOne(db, sql: "SELECT kind FROM items WHERE id = ?", arguments: [id.uuidString])
+            guard kind == ItemKind.text.rawValue else { return false }
+            let holder = try String.fetchOne(db, sql: "SELECT id FROM items WHERE contentHash = ?", arguments: [hash])
+            guard holder == nil || holder == id.uuidString else { return false }
+            try db.execute(sql: "UPDATE items SET text = ?, preview = ?, contentHash = ? WHERE id = ?",
+                           arguments: [text, ClipboardItem.textPreview(text), hash, id.uuidString])
+            return true
         }
     }
 
@@ -177,6 +206,17 @@ public final class Store {
         }
     }
 
+    /// Deletes every non-pinned row and its image blob. Returns the number deleted.
+    @discardableResult
+    public func deleteUnpinned() throws -> Int {
+        try dbQueue.write { db in
+            let rows = try Row.fetchAll(db, sql: "SELECT imagePath FROM items WHERE pinned = 0")
+            for row in rows { removeBlob(row["imagePath"]) }
+            try db.execute(sql: "DELETE FROM items WHERE pinned = 0")
+            return db.changesCount
+        }
+    }
+
     /// Deletes image blob files on disk that no row references (e.g. left behind
     /// by a crash between writing a blob and committing its row). Returns the count removed.
     @discardableResult
@@ -222,7 +262,8 @@ public final class Store {
             contentHash: row["contentHash"],
             sourceApp: (row["sourceApp"] as String?).map { SourceApp(name: $0, bundleID: row["sourceAppBundleID"]) },
             firstCopiedAt: (row["firstCopiedAt"] as Double?).map { Date(timeIntervalSince1970: $0) },
-            copyCount: row["copyCount"]
+            copyCount: row["copyCount"],
+            title: row["title"]
         )
     }
 }
