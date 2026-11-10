@@ -29,7 +29,7 @@ code** — open the files, trace control flow and threading yourself; never assu
 
 - **Simplicity first.** Flag over-engineering, speculative abstraction, and unused flexibility as
   readily as bugs. Recommend only fixes that pay for themselves at this scale.
-- **Do NOT recommend:** sandboxing (breaks the global hotkey + CGEvent paste), DI/protocols for the
+- **Do NOT recommend:** sandboxing (breaks the global hotkey), DI/protocols for the
   shell, encryption/SQLCipher (local single-user util), or wiring `.richText` unless the change
   already does it.
 - Commits are author-only; branch → `--ff-only` into `master`.

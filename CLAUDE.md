@@ -98,13 +98,14 @@ that a test exists.
 
 ## Don'ts (hard-won)
 
-- **Don't sandbox the app** — it breaks the Carbon global hotkey and the CGEvent paste.
+- **Don't sandbox the app** — it breaks the Carbon global hotkey.
 - **Don't half-wire `.richText`** — the case is reserved and only passively handled (grouped with
   `.text` in `Paster`, given an icon in `HistoryRowView`); `ClipboardMonitor` never produces it.
   Either wire RTF capture end-to-end or leave it as-is — don't extend the dead path further.
 - **Don't abstract the shell** for "testability" (see Testing).
-- Auto-paste needs **Accessibility** permission (synthesized ⌘V). The app prompts and degrades
-  gracefully (item still lands on the clipboard) — keep it that way.
+- **No auto-paste, no Accessibility.** Choosing an item only writes it to the clipboard and
+  restores the previous app; the user presses ⌘V. Momo needs no special permissions — keep it
+  that way (synthesizing ⌘V would need an Accessibility grant).
 
 ## Distribution
 

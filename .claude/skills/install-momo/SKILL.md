@@ -22,6 +22,3 @@ clears quarantine, and launches it.
   `brew reinstall --cask momo` restores the released build.
 - The version shown is whatever Info.plist says — unreleased commits still read as the last
   released version. Don't bump just to install; bumping is part of a release (`release-momo`).
-- Each ad-hoc-signed build has a new code hash, so macOS may ask for **Accessibility** again
-  (needed for auto-paste). If auto-paste stops working: System Settings → Privacy & Security →
-  Accessibility, remove Momo, re-add it.

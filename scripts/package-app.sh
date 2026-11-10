@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #
 # Builds Momo.app (universal arm64 + x86_64) and a distributable zip for the
-# Homebrew cask. Ad-hoc signs the bundle so its Accessibility grant persists
-# across launches, then prints the zip sha256 (CI writes it into the cask on release).
+# Homebrew cask. Ad-hoc signs the bundle, bundles the license notices, then prints the zip sha256 (CI writes it into the cask on release).
 #
 # Usage:  ./scripts/package-app.sh
 # Output: dist/Momo.app  and  dist/Momo-<version>.zip
@@ -28,6 +27,9 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BUILD_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 cp "$PLIST" "$APP/Contents/Info.plist"
 cp "assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+# License notices travel with the binary: Momo's GPL and the bundled GRDB's MIT notice.
+cp "LICENSE" "$APP/Contents/Resources/LICENSE"
+cp ".build/checkouts/GRDB.swift/LICENSE" "$APP/Contents/Resources/LICENSE-GRDB"
 
 echo "==> Ad-hoc signing"
 codesign --force --deep --sign - "$APP"

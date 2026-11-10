@@ -10,7 +10,7 @@ Everything you copy — text, files, images — kept, searchable, and one keystr
 Native Swift + AppKit. No Electron. No lag. No telemetry.
 
 ![Platform](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)
-![Swift](https://img.shields.io/badge/Swift-5.9-orange?logo=swift)
+![Swift](https://img.shields.io/badge/Swift-6.1-orange?logo=swift)
 ![UI](https://img.shields.io/badge/UI-AppKit-blue)
 ![Tests](https://img.shields.io/badge/tests-137%20passing-brightgreen)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
@@ -80,10 +80,13 @@ and filters faster than you can think.
 
 ```sh
 brew tap simantaturja/momo
-brew trust simantaturja/momo          # third-party taps need trust (Homebrew 6.0+)
-brew install --cask momo
+brew trust --cask simantaturja/momo/momo   # Homebrew 6.0+ asks you to trust third-party casks
+brew install --cask simantaturja/momo/momo
 xattr -r -d com.apple.quarantine /Applications/Momo.app   # unsigned: clear Gatekeeper once
 ```
+
+Upgrade with `brew upgrade --cask momo`; uninstall with `brew uninstall --cask momo` (add
+`--zap` to also delete your history in `~/Library/Application Support/Momo`).
 
 > Momo isn't notarized yet, so macOS quarantines it — the `xattr` line clears that once (or
 > right-click Momo.app in Finder → Open the first time). Once the app is notarized, that step
@@ -91,10 +94,11 @@ xattr -r -d com.apple.quarantine /Applications/Momo.app   # unsigned: clear Gate
 
 ### From source
 
-Requirements: **macOS 13+** and a Swift 5.9+ toolchain (Xcode or the Swift toolchain).
+Requirements: **macOS 13+** and **Swift 6.1+** (Xcode 16.3+, or its Command Line Tools) —
+the GRDB dependency needs it.
 
 ```sh
-git clone <this-repo> momo && cd momo
+git clone https://github.com/simantaturja/momo.git && cd momo
 swift run Momo               # build and launch
 ./scripts/package-app.sh     # or build a distributable Momo.app + zip
 ./scripts/install-app.sh     # or build and install into /Applications
@@ -192,8 +196,7 @@ when it was first copied, and how many times.
   images capped at **500 MB** total and aged out after **30 days**. Pinned items are exempt.
   (Overridable via the `maxItems`, `maxImageMB`, `imageMaxAgeDays` `UserDefaults` keys.)
 - **At rest**, the store is not encrypted; protection relies on your macOS account and
-  FileVault. Momo is intentionally unsandboxed (a sandboxed app can't drive a global hotkey
-  or synthesize ⌘V into other apps).
+  FileVault. Momo is intentionally unsandboxed (the sandbox breaks its Carbon global hotkey).
 
 ## Architecture
 
@@ -219,13 +222,13 @@ Sources/
     PreviewPaneView      the selected item(s) in full, beside the list
     ImageLoader          off-main, cached thumbnail + preview decoding
     HotkeyManager        Carbon global hotkey
-    Paster               writes pasteboard + synthesizes ⌘V
+    Paster               writes the chosen item(s) to the pasteboard
 Tests/MomoCoreTests/   ← unit tests for the core
 ```
 
 All the logic worth testing sits in `MomoCore` behind the `PasteboardReading` protocol, so
 the clipboard can be faked in tests. The `Momo` layer is deliberately kept as thin,
-untestable-by-design adapters (menu bar, panel, hotkey, keystroke synthesis).
+untestable-by-design adapters (menu bar, panel, hotkey, pasteboard writes).
 
 ## Development
 
@@ -241,9 +244,10 @@ in-memory store.
 
 ## Roadmap
 
-- [ ] Preferences UI for the retention caps (currently `defaults` keys only)
+- [ ] Settings UI for the image caps (`maxImageMB`, `imageMaxAgeDays` are `defaults` keys only)
 - [ ] Throttle background pruning off the per-copy path
-- [ ] CI (`swift test` on push) + a formatter
+- [ ] A formatter
+- [x] CI (`swift build` + `swift test` on every push)
 - [ ] Rich-text capture (the `.richText` kind is reserved but not yet produced)
 - [x] A `LICENSE` (GPL-3.0-or-later)
 

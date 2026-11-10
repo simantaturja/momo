@@ -17,9 +17,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = coordinator.panel  // eager pre-warm: build panel/HistoryView at launch, not on first hotkey press
         _ = CopyCard.shared    // and the hover card, which the first open's rows touch
 
-        // Auto-paste synthesizes ⌘V, which needs Accessibility trust. Prompt once on first run.
-        Paster.promptForAccessibilityIfNeeded()
-
         hotkey = HotkeyManager { [weak self] in self?.coordinator.panel.toggle() }
         if !hotkey.register() { warnHotkeyRegistrationFailed() }
 

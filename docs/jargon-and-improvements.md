@@ -140,26 +140,22 @@ async, off-screen rows load nothing).
 
 ---
 
-## 7. "It pastes into whatever app you were in" → Focus stash + synthetic Cmd+V
+## 7. "You land back where you were" → Focus stash + copy-only
 
 **Simple:** When you open Momo, it remembers which app you were using. After you pick
-an item, it puts that app back in front and simulates pressing Cmd+V for you.
+an item, Momo copies it, closes, and puts that app back in front — you press Cmd+V.
 
 **Technical:** On show, `PanelController` stashes
 `NSWorkspace.shared.frontmostApplication`. On choose, `Paster.writeToPasteboard` sets
-the chosen item, the panel hides, the stashed app is re-activated, and after an ~80ms
-focus settle, `Paster.synthesizePaste` posts a synthetic ⌘V via a `CGEvent` on the
-HID event tap.
+the chosen item(s), the panel hides, and the stashed app is re-activated. Momo does not
+synthesize a keystroke, so it needs no Accessibility permission.
 
-**Correlation:** "Pastes where you were" = the non-activating panel never truly steals
-ownership, so restoring focus is just re-activating the remembered app; the synthetic
-keystroke completes the paste the way you'd do it by hand.
+**Correlation:** "Back where you were" = the non-activating panel never truly steals
+ownership, so restoring focus is just re-activating the remembered app.
 
 **Jargon:**
 - **Non-activating panel** — a window that can receive input without making its app the
   active/foreground app.
-- **`CGEvent` / HID event tap** — low-level API to synthesize and post input events
-  (keystrokes) system-wide. Requires the user to grant Accessibility permission.
 
 ---
 
@@ -190,7 +186,7 @@ that control; the alternatives abstract it away.
 | Passwords not stored (unless you opt in) | `PrivacyFilter` ingest gate |
 | No duplicate clutter | Content-hash dedupe-to-top |
 | Images don't lag | Disk blobs + lazy thumbnails + virtualization |
-| Pastes where you were | Focus stash + synthetic ⌘V |
+| Back where you were, ready to ⌘V | Focus stash + copy-only |
 
 > Momo's edge is narrow and deliberate: move every expensive operation off the two
 > paths a human actually waits on — the popup opening, and a search keystroke.
