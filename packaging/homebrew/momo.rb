@@ -3,7 +3,7 @@
 # `sha256` is written by CI (.github/workflows/release.yml) on each release — never hand-edit it.
 cask "momo" do
   version "0.9.0"
-  sha256 "6894beaa762f11434c2685472797821f9e9e6772582db74f66367e2243377837"
+  sha256 "b84234587671f79f40621083fef945b900da31925ba07ba499ac14540f0c49cd"
 
   url "https://github.com/simantaturja/momo/releases/download/v#{version}/Momo-#{version}.zip"
   name "Momo"
